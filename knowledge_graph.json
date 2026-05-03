@@ -1,0 +1,38 @@
+{
+    "business_info": {
+        "name": "Ather Energy Showroom",
+        "location": "Bengaluru",
+        "timings": "9 AM to 8 PM"
+    },
+    "products": [
+        {
+            "name": "Ather 450X",
+            "price": "1,40,000 INR",
+            "range": "150 km",
+            "colors": [
+                "Space Grey",
+                "White",
+                "Mint"
+            ],
+            "discount": "30%"
+        },
+        {
+            "name": "Ather 450S",
+            "price": "1,10,000 INR",
+            "range": "115 km",
+            "colors": [
+                "Salt White",
+                "Cosmic Black"
+            ],
+            "discount": "50%"
+        }
+    ],
+    "faq": {
+        "charging_time": "0 to 80% in 5 hours and 45 minutes",
+        "warranty": "3 years or 30,000 km"
+    },
+    "greeting": "hi",
+    "uncategorized_updates": [
+        "> Kiyotoka:\ndiscount on 450 series model of 50 perchentage"
+    ]
+}

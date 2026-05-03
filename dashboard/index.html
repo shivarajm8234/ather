@@ -1,0 +1,130 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Asterisk Voice Intelligence Dashboard</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Sidebar -->
+        <nav class="sidebar">
+            <div class="logo">
+                <span class="logo-icon">🎙️</span>
+                <h2>Ather Voice</h2>
+            </div>
+            <ul class="nav-links">
+                <li class="active"><a href="#overview">Overview</a></li>
+                <li><a href="#endpoints">SIP Endpoints</a></li>
+                <li><a href="#config">Configuration</a></li>
+                <li><a href="#logs">Live Console</a></li>
+            </ul>
+            <div class="status-badge online">Server Active</div>
+        </nav>
+
+        <!-- Main Content -->
+        <main class="content">
+            <header>
+                <h1>System Intelligence</h1>
+                <div class="user-profile">
+                    <span id="current-time"></span>
+                </div>
+            </header>
+
+            <div class="grid-container">
+                <!-- IP Info Card -->
+                <div class="card glass">
+                    <h3>Network Configuration</h3>
+                    <div class="ip-display">
+                        <div class="ip-item">
+                            <label>Local IP</label>
+                            <span id="local-ip">Detecting...</span>
+                        </div>
+                        <div class="ip-item">
+                            <label>SIP Port</label>
+                            <span>5060</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- SIP Status Card -->
+                <div class="card glass">
+                    <h3>SIP Endpoints</h3>
+                    <div class="endpoint-list">
+                        <div class="endpoint">
+                            <span class="ext">2000</span>
+                            <span class="label">Mobile</span>
+                            <span class="status-dot online"></span>
+                        </div>
+                        <div class="endpoint">
+                            <span class="ext">5678</span>
+                            <span class="label">Agent</span>
+                            <span class="status-dot offline"></span>
+                        </div>
+                        <div class="endpoint">
+                            <span class="ext">3000</span>
+                            <span class="label">Voice AI</span>
+                            <span class="status-dot online"></span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Language Config Card -->
+                <div class="card glass wide">
+                    <h3>Multilingual Agent Config</h3>
+                    <div class="lang-grid">
+                        <div class="lang-item active">
+                            <span class="flag">🇮🇳</span>
+                            <span class="name">Kannada</span>
+                            <span class="code">kn-IN</span>
+                        </div>
+                        <div class="lang-item active">
+                            <span class="flag">🇮🇳</span>
+                            <span class="name">Hindi</span>
+                            <span class="code">hi-IN</span>
+                        </div>
+                        <div class="lang-item active">
+                            <span class="flag">🇬🇧</span>
+                            <span class="name">English</span>
+                            <span class="code">en-IN</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Voice Interaction Card -->
+                <div class="card glass interaction-card">
+                    <h3>Live Voice Interaction</h3>
+                    <div class="voice-controls">
+                        <button id="mic-btn" class="mic-button">
+                            <span class="mic-icon">🎤</span>
+                        </button>
+                        <div class="visualizer">
+                            <div class="bar"></div>
+                            <div class="bar"></div>
+                            <div class="bar"></div>
+                            <div class="bar"></div>
+                            <div class="bar"></div>
+                        </div>
+                    </div>
+                    <div class="transcript-box">
+                        <p id="live-transcript">Click the mic and start speaking...</p>
+                    </div>
+                </div>
+
+                <!-- Console Card -->
+                <div class="card glass full-width">
+                    <h3>Live Asterisk Console</h3>
+                    <div class="terminal" id="terminal-output">
+                        <p class="log-line">[2026-05-03 22:05:01] Starting Multilingual Voice Agent...</p>
+                        <p class="log-line">[2026-05-03 22:05:05] Waiting for selection (1:KN, 2:HI)...</p>
+                        <p class="log-line">[Agent] Responding in kn-IN: ಧನ್ಯವಾದಗಳು...</p>
+                    </div>
+                </div>
+            </div>
+        </main>
+    </div>
+    <script src="script.js"></script>
+</body>
+</html>
