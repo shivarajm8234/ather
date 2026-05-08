@@ -92,25 +92,40 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
                 self.wfile.write(json.dumps({"status": "error", "message": "Invalid 2FA Code. Check Google Authenticator."}).encode())
+        elif self.path == '/api/staff/add':
+            new_member = json.loads(post_data)
+            staff_file = os.path.join(BASE_DIR, 'staff.json')
+            if os.path.exists(staff_file):
+                with open(staff_file, 'r') as f:
+                    staff_list = json.load(f)
+                new_id = max([s.get('id', 0) for s in staff_list]) + 1 if staff_list else 1
+                new_member['id'] = new_id
+                staff_list.append(new_member)
+                with open(staff_file, 'w') as f:
+                    json.dump(staff_list, f, indent=4)
+                with open(os.path.join(BASE_DIR, 'active_agent.json'), 'w') as f:
+                    json.dump(new_member, f, indent=4)
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "success", "id": new_id}).encode())
+            else:
+                self.send_response(404)
+                self.end_headers()
         elif self.path == '/api/staff/update':
             updated_staff_member = json.loads(post_data)
             staff_file = os.path.join(BASE_DIR, 'staff.json')
             if os.path.exists(staff_file):
                 with open(staff_file, 'r') as f:
                     staff_list = json.load(f)
-                
                 for i, s in enumerate(staff_list):
                     if s['id'] == updated_staff_member['id']:
                         staff_list[i] = updated_staff_member
                         break
-                
                 with open(staff_file, 'w') as f:
                     json.dump(staff_list, f, indent=4)
-                
-                # Also set this as the active agent for the phone system
                 with open(os.path.join(BASE_DIR, 'active_agent.json'), 'w') as f:
                     json.dump(updated_staff_member, f, indent=4)
-                
                 self.send_response(200)
                 self.send_header('Content-Type', 'application/json')
                 self.end_headers()
@@ -186,7 +201,11 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             if f.endswith('.json'):
                 with open(os.path.join(calls_dir, f), 'r') as file:
                     try:
-                        calls.append(json.load(file))
+                        data = json.load(file)
+                        if isinstance(data, list):
+                            calls.extend(data)
+                        else:
+                            calls.append(data)
                     except:
                         pass
         return sorted(calls, key=lambda x: x.get('timestamp', ''), reverse=True)

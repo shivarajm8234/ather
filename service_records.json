@@ -9,5 +9,41 @@
         "status": "Due Soon",
         "last_contact": "2026-05-07",
         "missed": false
+    },
+    {
+        "id": "S202",
+        "customer_name": "ಶಿವರಾಜ್",
+        "phone": "2000",
+        "vehicle_no": "KA-SYNC",
+        "current_km": 0,
+        "service_type": "Voice Booking",
+        "status": "Scheduled",
+        "appointment_date": "2026-05-08",
+        "appointment_time": "TBD",
+        "station": "Station A"
+    },
+    {
+        "id": "S203",
+        "customer_name": "ಶಿವರಾಜ್",
+        "phone": "2000",
+        "vehicle_no": "KA-SYNC",
+        "current_km": 0,
+        "service_type": "Voice Booking",
+        "status": "Scheduled",
+        "appointment_date": "2026-05-08",
+        "appointment_time": "TBD",
+        "station": "Station A"
+    },
+    {
+        "id": "S204",
+        "customer_name": "Ananya Iyer",
+        "phone": "+91 8050098765",
+        "vehicle_no": "KA-SYNC",
+        "current_km": 0,
+        "service_type": "Voice Booking",
+        "status": "Scheduled",
+        "appointment_date": "2026-05-08",
+        "appointment_time": "TBD",
+        "station": "Station A"
     }
 ]

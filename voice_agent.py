@@ -32,21 +32,33 @@ class MultilingualVoiceAgent:
         self.language = "en-IN"
         self.recording_path = "/tmp/user_input"
         self.conversation = []
-        self.caller_id = self.agi.get_variable("CALLERID(num)") or "Unknown"
+        raw_id = self.agi.get_variable("CALLERID(num)") or "Unknown"
+        self.caller_id = "".join(filter(str.isdigit, str(raw_id)))[-10:] if raw_id != "Unknown" else "Unknown"
+        self.user_profile = retail_agent_utils.get_user_profile(self.caller_id)
         self.load_active_agent()
+        self._cache_knowledge()
+
+    def _cache_knowledge(self):
+        """Cache knowledge graph in memory for sub-second LLM processing."""
+        try:
+            with open("/home/satoru/Desktop/ds/knowledge_graph.json", "r") as f:
+                self.knowledge_base = f.read()
+        except:
+            self.knowledge_base = "No additional knowledge available."
         
     def load_active_agent(self):
         """Load the active AI persona configuration."""
         try:
-            # Check for a specific 'active_agent.json' or default to the first one in staff.json
+            with open("/home/satoru/Desktop/ds/staff.json", "r") as f:
+                self.staff_list = json.load(f)
+            
+            # Check for a specific 'active_agent.json'
             active_path = "/home/satoru/Desktop/ds/active_agent.json"
             if os.path.exists(active_path):
                 with open(active_path, "r") as f:
                     self.active_agent = json.load(f)
             else:
-                with open("/home/satoru/Desktop/ds/staff.json", "r") as f:
-                    staff = json.load(f)
-                    self.active_agent = staff[0]
+                self.active_agent = self.staff_list[0]
             self.log(f"Active Persona: {self.active_agent['name']} ({self.active_agent['voice_gender']})")
         except Exception as e:
             self.log(f"Failed to load agent: {e}")
@@ -55,10 +67,36 @@ class MultilingualVoiceAgent:
                 "voice_gender": "Female", 
                 "instructions": "Be professional and helpful."
             }
+            self.staff_list = [self.active_agent]
         
     def log(self, message):
         """Styled logging for Asterisk console."""
         self.agi.verbose(f" \033[1;34m[Agent]\033[0m {message}")
+
+    def _format_knowledge(self, knowledge_json):
+        """Convert JSON knowledge into a human-readable text manual for the LLM."""
+        try:
+            data = json.loads(knowledge_json)
+            lines = ["ATHER ENERGY KNOWLEDGE BASE:"]
+            
+            # Business Info
+            biz = data.get("business_info", {})
+            lines.append(f"Showroom: {biz.get('name')} in {biz.get('location')}. Hours: {biz.get('timings')}.")
+            
+            # Products
+            lines.append("\nPRODUCTS & SPECS:")
+            for p in data.get("products", []):
+                lines.append(f"- {p['name']}: Range {p.get('true_range','N/A')}, Top Speed {p.get('top_speed','N/A')}, Price {p.get('price_starting')}. Offer: {p.get('current_offers','None')}")
+            
+            # Service
+            svc = data.get("service_info", {})
+            lines.append("\nSERVICE POLICY:")
+            lines.append(f"Milestones: {', '.join([m['milestone'] for m in svc.get('intervals', [])])}")
+            lines.append(f"Battery Warranty: {svc.get('battery_warranty')}")
+            
+            return "\n".join(lines)
+        except:
+            return str(knowledge_json)
 
     def say(self, text, lang_code=None):
         """TTS using Sarvam AI."""
@@ -70,16 +108,26 @@ class MultilingualVoiceAgent:
         self.log(f"Responding in {lang_code}: {text}")
         self.conversation.append({"role": "agent", "content": text, "lang": lang_code})
         
-        # Select speaker based on persona voice_gender
-        speaker = "priya" if self.active_agent.get("voice_gender") == "Female" else "mani"
+        # High-fidelity Speaker Mapping
+        speaker_map = {
+            "Aura": "priya",    # Empathetic Female
+            "Kavi": "mani",     # Analytical Male
+            "Zephyr": "kumar",  # Strategic Manager (Male)
+            "Female": "priya",  # Gender Fallback
+            "Male": "mani"      # Gender Fallback
+        }
+        
+        agent_name = self.active_agent.get("name", "Aura")
+        gender = self.active_agent.get("voice_gender", "Female")
+        speaker = speaker_map.get(agent_name, speaker_map.get(gender, "priya"))
         
         payload = {
             "inputs": [text],
             "target_language_code": lang_code,
             "speaker": speaker,
             "speech_sample_rate": 8000,
-            "enable_preprocessing": True,
-            "model": "bulbul:v3"
+            "enable_preprocessing": False, # Disabled for speed
+            "model": "bulbul:v2" # v2 is optimized for low-latency
         }
         headers = {"api-subscription-key": SARVAM_API_KEY, "Content-Type": "application/json"}
 
@@ -94,17 +142,28 @@ class MultilingualVoiceAgent:
                 self.log(f"TTS Error: {response.text}")
         except Exception as e:
             self.log(f"TTS Exception: {str(e)}")
+        finally:
+            # Ensure we never hang up here
+            pass
+    def _get_transition_msg(self, name, role):
+        phrases = {
+            "en-IN": f"Please wait while I connect you to {name}, our {role}.",
+            "kn-IN": f"ದಯವಿಟ್ಟು ನಿರೀಕ್ಷಿಸಿ, ನಾನು ನಿಮ್ಮನ್ನು ನಮ್ಮ {role} {name} ಅವರೊಂದಿಗೆ ಸಂಪರ್ಕಿಸುತ್ತಿದ್ದೇನೆ.",
+            "hi-IN": f"कृपया प्रतीक्षा करें, मैं आपको हमारे {role} {name} से जोड़ रहा हूँ।"
+        }
+        return phrases.get(self.language, phrases["en-IN"])
 
     def listen_and_transcribe(self):
-        """Record audio and use Sarvam STT to transcribe."""
+        """Record audio with aggressive silence detection for low latency."""
         self.log("Listening...")
-        # Record for 5 seconds or until '#' is pressed
-        self.agi.record_file(self.recording_path, "wav", "#", 5000)
+        # Reduced timeout to 3s for snappier interaction
+        self.agi.record_file(self.recording_path, "wav", "#", 3000, 0, True, 2)
         
         if not os.path.exists(f"{self.recording_path}.wav"):
             return None
 
         self.log("Transcribing...")
+        start_stt = time.time()
         try:
             with open(f"{self.recording_path}.wav", "rb") as f:
                 files = {"file": (f"{self.recording_path}.wav", f, "audio/wav")}
@@ -113,27 +172,18 @@ class MultilingualVoiceAgent:
                 
                 response = requests.post(SARVAM_STT_URL, files=files, data=data, headers=headers)
                 if response.status_code == 200:
+                    self.log(f"STT Latency: {time.time() - start_stt:.2f}s")
                     transcript = response.json().get("transcript", "")
                     self.log(f"User said: {transcript}")
                     self.conversation.append({"role": "user", "content": transcript, "lang": self.language})
                     return transcript
                 else:
-                    self.log(f"STT Error: {response.text}")
         except Exception as e:
             self.log(f"STT Exception: {str(e)}")
         return None
 
     def get_llm_response(self, text):
-        """Get response from Sarvam AI LLM with Knowledge Graph context."""
-        self.log("Thinking (Sales & Retail Brain)...")
-        
-        # Load Knowledge Graph
-        try:
-            with open("/home/satoru/Desktop/ds/knowledge_graph.json", "r") as f:
-                knowledge = f.read()
-        except:
-            knowledge = "No additional knowledge available."
-
+        """Get response from Sarvam AI LLM using cached knowledge."""
         headers = {
             "api-subscription-key": SARVAM_API_KEY,
             "Content-Type": "application/json"
@@ -159,61 +209,159 @@ class MultilingualVoiceAgent:
             pass
 
         prompt = f"""
-        You are a highly professional sales and service assistant for Ather Energy.
+        You are a PROACTIVE MULTILINGUAL assistant for Ather Energy.
+        Languages: English, Kannada, Hindi.
         
-        IDENTITY:
+        RULES:
+        1. NEVER say 'we will call you back'. Handle everything NOW.
+        2. If they want service, BOOK it immediately using [BOOK_SERVICE: YYYY-MM-DD HH:MM].
+        3. If they want to buy, answer and mark as [HOT_LEAD].
+        4. Solve the problem in this call regardless of the language.
+
+        CURRENT IDENTITY:
+        Agent Name: {self.active_agent['name']}
+        Role: {self.active_agent.get('role', 'Specialist')}
         Today's Date: {datetime.now().strftime('%Y-%m-%d')}
         Customer Name: {self.user_profile.get('name', 'Unknown')}
         Customer Phone: {self.caller_id}
         
         CONTEXT:
-        {knowledge}
+        {self._format_knowledge(self.knowledge_base)}
+        
+        CUSTOMER HISTORY:
+        {self.user_profile.get('history', 'No previous history.')}
         
         {history_context}
         
         USER QUERY: {text}
 
-        AVAILABLE OFFERS (Mention these voluntarily if appropriate):
-        {offers_text}
-
-        RETAIL RULES & PERSONA GUIDELINES:
-        Agent Name: {self.active_agent['name']}
-        Behavioral Directives: {self.active_agent.get('instructions', '')}
+        RETAIL RULES:
+        1. NEVER say 'we will call you back'. Handle everything NOW.
+        2. If they want to buy, answer questions and mark as [HOT_LEAD].
+        3. If they want service, check availability and BOOK it immediately using [BOOK_SERVICE: YYYY-MM-DD HH:MM].
+        4. If the intent shifts, use [SWITCH_AGENT: Name].
+        5. Stay concise, crisp, and professional.
         
-        1. If the user wants to BUY or asks for PRICE/DISCOUNT, answer and then say: "I have noted your interest. Our specialist will call you back shortly."
-        2. If the user asks for a service or says their vehicle is due, remind them about the 5k/10k km checkups and mention that regular service extends battery life.
-        3. If the user wants to book a service, check if they have a preferred date/time. If so, use the tag [BOOK_SERVICE: YYYY-MM-DD HH:MM] where HH:MM is on the hour (e.g. 10:00, 11:00).
-        4. If the user asks to speak to a person and specialists are busy, offer to schedule a priority callback.
-        5. Be very concise (max 2 sentences).
-        6. Speak in {self.language}.
+        INTERNAL TAGS (APPEND IF NEEDED):
+        [SWITCH_AGENT: Name], [HOT_LEAD], [SERVICE_QUERY], [BOOK_SERVICE: YYYY-MM-DD HH:MM], [UPDATE_NAME: <name>], [FEEDBACK: <text>]
+        """
         
-        INTERNAL TAGGING (MUST INCLUDE AT THE END):
-        [HOT_LEAD] if interested in buying or high-value offers.
-        [SERVICE_QUERY] if interested in service.
-        [BOOK_SERVICE: YYYY-MM-DD HH:MM] for booking.
-        [UPDATE_NAME: <name>] if the user tells you their name.
+        self.log("LLM Thinking (Groq)...")
+        start_llm = time.time()
+        
+        # Build prompt with explicit language instruction
+        lang_map = {"en-IN": "English", "kn-IN": "Kannada", "hi-IN": "Hindi"}
+        target_lang = lang_map.get(self.language, "English")
+        
+        system_instr = f"""
+        STRICT LANGUAGE LOCK: You must respond ONLY in {target_lang}. NEVER use other languages.
+        CUSTOMER IDENTIFIED: {self.user_profile.get('name', 'Unknown')}
+        
+        MANDATORY OPERATIONAL TAGS:
+        - If customer wants to buy, asks price, or shows high interest: ALWAYS include [HOT_LEAD] in your response.
+        - If customer gives an opinion or feedback: ALWAYS include [FEEDBACK: "summary of feedback"] in your response.
+        - If customer says their name: ALWAYS include [UPDATE_NAME: "Correct Name"] in your response.
+        - If booking a service: YOU MUST FIRST ASK FOR THEIR PREFERRED DATE AND TIME. After they provide it, include [BOOK_SERVICE: YYYY-MM-DD HH:MM] in your response. NEVER book without asking for a specific time.
+        
+        RULES:
+        1. IF NAME IS KNOWN (not 'Unknown'), NEVER ASK FOR IT. USE IT TO ADDRESS THEM.
+        2. NEVER change the language from {target_lang}.
+        3. Solve everything in this call.
         """
         
         payload = {
-            "model": "sarvam-105b",
-            "messages": [{"role": "user", "content": prompt}]
+            "model": "llama-3.3-70b-versatile",
+            "messages": [
+                {"role": "system", "content": system_instr},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.0
+        }
+        headers = {
+            "Authorization": f"Bearer {GROQ_API_KEY}",
+            "Content-Type": "application/json"
         }
         
         try:
-            response = requests.post("https://api.sarvam.ai/v1/chat/completions", json=payload, headers=headers)
+            response = requests.post(GROQ_URL, json=payload, headers=headers)
             if response.status_code == 200:
+                self.log(f"LLM Latency: {time.time() - start_llm:.2f}s")
                 content = response.json()["choices"][0]["message"].get("content")
+                if not content:
+                    self.log("Groq returned empty. Falling back...")
+                    return "I am listening. How can I help you?"
+                
+                self.log(f"AI Response: {content[:50]}...")
                 if content:
-                    # Logic to log leads based on tags
+                    # 1. Passive Interest Detection (Safety Net for Dashboard Updates)
+                    lower_text = text.lower()
+                    if any(word in lower_text for word in ["buy", "price", "booking", "interested", "cost", "showroom", "test ride"]):
+                        if "[HOT_LEAD]" not in content:
+                            content += " [HOT_LEAD]"
+                    
+                    if any(word in lower_text for word in ["good", "bad", "problem", "excellent", "worst", "feedback", "service is"]):
+                        if "[FEEDBACK:" not in content:
+                            content += f" [FEEDBACK: Customer opinion: {text[:60]}]"
+
+                    # 2. Logic to log leads based on tags
+                    if "[SWITCH_AGENT:" in content:
+                        try:
+                            agent_name = content.split("[SWITCH_AGENT:")[1].split("]")[0].strip()
+                            for staff in self.staff_list:
+                                if staff['name'].lower() == agent_name.lower():
+                                    transition_msg = self._get_transition_msg(staff['name'], staff.get('role', 'Specialist'))
+                                    self.say(transition_msg)
+                                    self.active_agent = staff
+                                    self.log(f"Switched to Persona: {staff['name']} ({staff['voice_gender']})")
+                                    # Update active_agent.json for persistence
+                                    with open("/home/satoru/Desktop/ds/active_agent.json", "w") as f:
+                                        json.dump(staff, f, indent=4)
+                                    break
+                            content = content.replace(f"[SWITCH_AGENT: {agent_name}]", "").replace(f"[SWITCH_AGENT:{agent_name}]", "").strip()
+                        except:
+                            pass
+
                     if "[HOT_LEAD]" in content:
-                        retail_agent_utils.add_lead(self.user_profile.get("name", "Unknown"), self.caller_id, notes=text, priority="Hot")
+                        # Determine stage based on context
+                        stage = "New Enquiry"
+                        if any(w in lower_text for w in ["test ride", "drive", "visit", "showroom"]):
+                            stage = "Test Ride"
+                        elif any(w in lower_text for w in ["discount", "price", "offer", "negotiate"]):
+                            stage = "Negotiation"
+                        elif any(w in lower_text for w in ["book", "order", "purchase"]):
+                            stage = "Booking"
+                        elif any(w in lower_text for w in ["contact", "called", "speak"]):
+                            stage = "Contacted"
+                            
+                        retail_agent_utils.add_lead(
+                            self.user_profile.get("name", "Unknown"), 
+                            self.caller_id, 
+                            notes=text, 
+                            priority="Hot",
+                            status=stage
+                        )
                         content = content.replace("[HOT_LEAD]", "").strip()
+                    
+                    if "[FEEDBACK:" in content:
+                        try:
+                            fb_text = content.split("[FEEDBACK:")[1].split("]")[0].strip()
+                            retail_agent_utils.save_feedback(self.user_profile.get("name", "Unknown"), self.caller_id, fb_text)
+                            content = content.split("[FEEDBACK:")[0] + content.split("]")[1]
+                        except:
+                            pass
+                        content = content.strip()
                     
                     if "[BOOK_SERVICE:" in content:
                         # Extract date/time: [BOOK_SERVICE: 2026-05-09 14:00]
                         try:
                             booking_info = content.split("[BOOK_SERVICE:")[1].split("]")[0].strip()
-                            b_date, b_time = booking_info.split(" ")
+                            parts = booking_info.split(" ")
+                            b_date = parts[0]
+                            # Robust date check: if only day is given (e.g. "20"), add current month/year
+                            if "-" not in b_date:
+                                b_date = f"{datetime.now().year}-{datetime.now().month:02d}-{int(b_date):02d}"
+                            
+                            b_time = parts[1] if len(parts) > 1 else "10:00"
                             success, msg = retail_agent_utils.book_service_slot(self.user_profile.get("name", "Unknown"), self.caller_id, b_date, b_time)
                             if success:
                                 content = content.split("[BOOK_SERVICE:")[0] + f" (Confirmed: {msg}) " + content.split("]")[1]
@@ -233,6 +381,15 @@ class MultilingualVoiceAgent:
                             pass
                         content = content.strip()
 
+                    if "[FEEDBACK:" in content:
+                        try:
+                            fb_text = content.split("[FEEDBACK:")[1].split("]")[0].strip()
+                            retail_agent_utils.save_feedback(self.user_profile.get("name", "Unknown"), self.caller_id, fb_text)
+                            content = content.split("[FEEDBACK:")[0] + content.split("]")[1]
+                        except:
+                            pass
+                        content = content.strip()
+
                     if "[SERVICE_QUERY]" in content:
                         content = content.replace("[SERVICE_QUERY]", "").strip()
                         
@@ -245,63 +402,61 @@ class MultilingualVoiceAgent:
             self.log(f"LLM Exception: {str(e)}")
             
         # Multilingual fallback messages
-        if self.language == "kn-IN":
-            return "ಕ್ಷಮಿಸಿ, ಈ ಮಾಹಿತಿಯನ್ನು ಒದಗಿಸಲು ಸಾಧ್ಯವಾಗುತ್ತಿಲ್ಲ."
-        elif self.language == "hi-IN":
-            return "ಕ್ಷಮಿಸಿ, ಈ ಮಾಹಿತಿಯನ್ನು ಒದಗಿಸಲು ಸಾಧ್ಯವಾಗುತ್ತಿಲ್ಲ."
-        return "I'm sorry, I couldn't process that."
+        fallbacks = {
+            "kn-IN": "\u0c95\u0ccd\u0cb7\u0cae\u0cbf\u0cb8\u0cbf, \u0ca8\u0ca8\u0c97\u0cc6 \u0c85\u0ca6\u0ca8\u0ccd\u0ca8\u0cc1 \u0caa\u0ccd\u0cb0\u0cbe\u0cb8\u0cc6\u0cb8\u0ccd \u0cae\u0cbe\u0ca1\u0cb2\u0cc1 \u0cb8\u0cbe\u0ca7\u0ccd\u0caf\u0cb5\u0cbe\u0c97\u0cb2\u0cbf\u0cb2\u0ccd\u0cb2. \u0ca6\u0caf\u0cb5\u0cbf\u0c9f\u0ccd\u0c9f\u0cc1 \u0cae\u0ca4\u0ccd\u0ca4\u0cca\u0cae\u0ccd\u0cae\u0cc6 \u0caa\u0ccd\u0cb0\u0caf\u0ca4\u0ccd\u0ca8\u0cbf\u0cb8\u0cbf.",
+            "hi-IN": "\u0915\u094d\u0937\u092e\u093e \u0915\u0930\u0947\u0902, \u092e\u0948\u0902 \u0909\u0938\u0947 \u0938\u0902\u0938\u093e\u0927\u093f\u0924 \u0928\u0939\u0940\u0902 \u0915\u0930 \u0938\u0915\u093e\u0964 \u0915\u0943\u092a\u092f\u093e \u092b\u093f\u0930 \u0938\u0947 \u092a\u094d\u0930\u092f\u093e\u0938 \u0915\u0930\u0947\u0902\u0964",
+            "en-IN": "I'm sorry, I couldn't process that right now. Could you please repeat?"
+        }
+        return fallbacks.get(self.language, fallbacks["en-IN"])
 
     def run(self):
         try:
             self.agi.answer()
-            time.sleep(1) # Wait for audio channel to stabilize
+            time.sleep(0.5)
             
-            # Initial Greeting
-            self.log("Starting initial greeting...")
-            self.say("Welcome. For English press 1. ಕನ್ನಡಕ್ಕಾಗಿ 2 ಒತ್ತಿರಿ. हिंदी के लिए 3 दबाएं.", "en-IN")
+            # Use profile loaded in __init__
+            customer_name = self.user_profile.get("name", "Unknown")
+            customer_lang = self.user_profile.get("language")
             
-            digit = self.agi.wait_for_digit(4000)
-            self.log(f"Digit received: {digit}")
-            
-            # Load User Profile
-            self.user_profile = retail_agent_utils.get_user_profile(self.caller_id)
-
-            if digit == '2':
-                self.language = "kn-IN"
-                if self.user_profile.get("name") == "Unknown":
-                    self.say("ಧನ್ಯವಾದಗಳು. ನಿಮ್ಮ ಹೆಸರೇನು?")
-                else:
-                    self.say(f"ಹಲೋ {self.user_profile['name']}, ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಬಹುದು?")
-            elif digit == '3':
-                self.language = "hi-IN"
-                if self.user_profile.get("name") == "Unknown":
-                    self.say("धन्यवाद। आपका नाम क्या है?")
-                else:
-                    self.say(f"नमस्ते {self.user_profile['name']}, मैं आपकी क्या सहायता कर सकता हूँ?")
-            else:
-                # Default to English (1 or timeout)
-                self.language = "en-IN"
-                if self.user_profile.get("name") == "Unknown":
-                    self.say("Thank you. May I know your name please?")
-                else:
-                    self.say(f"Hello {self.user_profile['name']}. How can I help you today?")
+            if customer_name != "Unknown" and customer_lang:
+                self.language = customer_lang
+                self.log(f"Proactive Recognition: {customer_name} ({customer_lang})")
                 
-            # Conversation Loop (3 turns)
-            for i in range(3):
-                self.log(f"Turn {i+1} starting...")
+                # Immediate personalized greeting using loaded persona
+                agent_name = self.active_agent.get("name", "Aura")
+                if self.language == "kn-IN":
+                    self.say(f"\u0ca8\u0cae\u0cb8\u0ccd\u0c95\u0cbe\u0cb0 {customer_name} \u0c85\u0cb5\u0cb0\u0cc7, \u0ca8\u0cae\u0ccd\u0cae \u0c85\u0ca5\u0cb0\u0ccd \u0c8e\u0ca8\u0cb0\u0ccd\u0c9c\u0cbf\u0c97\u0cc6 \u0cb8\u0ccd\u0cb5\u0cbe\u0c97\u0ca4. \u0ca8\u0cbe\u0ca8\u0cc1 {agent_name}, \u0ca8\u0cbf\u0cae\u0c97\u0cc6 \u0cb9\u0cc7\u0c97\u0cc6 \u0cb8\u0cb9\u0cbe\u0caf \u0cae\u0cbe\u0ca1\u0cac\u0cb2\u0ccd\u0cb2\u0cc6?")
+                elif self.language == "hi-IN":
+                    self.say(f"\u0928\u092e\u0938\u094d\u0924\u0947 {customer_name} \u091c\u0940, \u090f\u0925\u0930 \u090f\u0928\u0930\u094d\u091c\u0940 \u092e\u0947\u0902 \u0906\u092a\u0915\u093e \u0938\u094d\u0935\u093e\u0917\u0924 \u0939\u0948\u0964 \u092e\u0948\u0902 {agent_name} \u0939\u0942\u0901, \u0906\u092a\u0915\u0940 \u0915\u094d\u092f\u093e \u092e\u0926\u0926 \u0915\u0930 \u0938\u0915\u0924\u093e \u0939\u0942\u0901?")
+                else:
+                    self.say(f"Welcome back {customer_name}! I am {agent_name} from Ather Energy. How can I assist you with your scooter today?")
+            else:
+                # Fallback to Language Selection Menu
+                self.log("Unknown caller. Playing language menu...")
+                self.say("Welcome. For English press 1. \u0c95\u0ca8\u0ccd\u0ca8\u0ca1\u0c95\u0ccd\u0c95\u0cbe\u0c97\u0cbf 2 \u0c92\u0ca4\u0ccd\u0ca4\u0cbf\u0cb0\u0cbf. \u0939\u093f\u0902\u0926\u0940 \u0915\u0947 \u0932\u093f\u090f 3 \u0926\u092c\u093e\u090f\u0902.", "en-IN")
+                
+                digit = self.agi.wait_for_digit(4000)
+                if digit == '2':
+                    self.language = "kn-IN"
+                    self.user_profile["language"] = "kn-IN"
+                    self.say("\u0ca7\u0ca8\u0ccd\u0caf\u0cb5\u0cbe\u0ca6\u0c97\u0cb3\u0cc1. \u0ca8\u0cbf\u0cae\u0ccd\u0cae \u0cb9\u0cc6\u0cb8\u0cb0\u0cc7\u0ca8\u0cc1?")
+                elif digit == '3':
+                    self.language = "hi-IN"
+                    self.user_profile["language"] = "hi-IN"
+                    self.say("\u0927\u0928\u094d\u092f\u0935\u093e\u0926\u0964 \u0906\u092a\u0915\u093e \u0928\u093e\u092e \u0915\u094d\u092f\u093e \u0939\u0948?")
+                else:
+                    self.language = "en-IN"
+                    self.user_profile["language"] = "en-IN"
+                    self.say("Thank you. May I know your name please?")
+            
+            # Global Conversation Loop
+            while True:
                 user_text = self.listen_and_transcribe()
                 if user_text:
                     llm_reply = self.get_llm_response(user_text)
                     self.say(llm_reply)
                 else:
-                    self.log("No input detected. Prompting user...")
-                    if self.language == "kn-IN":
-                        self.say("ದಯವಿಟ್ಟು ಮತ್ತೆ ಹೇಳಿ.")
-                    elif self.language == "hi-IN":
-                        self.say("कृपया फिर से कहें।")
-                    else:
-                        self.say("Please say that again.")
-                    # Don't break, allow the loop to try the next turn
+                    break # End call on silence
         except Exception as e:
             self.log(f"CRITICAL ERROR in Run: {str(e)}")
         finally:
@@ -314,12 +469,23 @@ class MultilingualVoiceAgent:
                 if not os.path.exists(log_dir):
                     os.makedirs(log_dir, exist_ok=True)
                 
-                log_file = f"{log_dir}/call_{unique_id}.json"
+                log_file = f"{log_dir}/call_{self.caller_id}.json"
+                
+                # Load existing calls for this user
+                all_calls = []
+                if os.path.exists(log_file):
+                    try:
+                        with open(log_file, "r") as f:
+                            all_calls = json.load(f)
+                            if not isinstance(all_calls, list):
+                                all_calls = [all_calls]
+                    except:
+                        all_calls = []
                 
                 # Create human language summary
                 human_summary = retail_agent_utils.summarize_conversation(self.conversation)
                 
-                call_data = {
+                new_call_data = {
                     "unique_id": unique_id,
                     "phone": self.caller_id,
                     "customer_name": self.user_profile.get("name", "Unknown"),
@@ -329,10 +495,14 @@ class MultilingualVoiceAgent:
                     "conversation": self.conversation
                 }
                 
+                all_calls.insert(0, new_call_data) # Newest first
+                
                 with open(log_file, "w") as f:
-                    json.dump(call_data, f, indent=4)
+                    json.dump(all_calls, f, indent=4)
                 
                 # Update user profile history
+                if "history" not in self.user_profile or not isinstance(self.user_profile["history"], list):
+                    self.user_profile["history"] = []
                 self.user_profile["history"].append(f"Call on {datetime.now().strftime('%Y-%m-%d')}: {human_summary[:100]}...")
                 retail_agent_utils.save_user_profile(self.user_profile)
                     

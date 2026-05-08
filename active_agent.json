@@ -3,7 +3,7 @@
     "name": "Aura",
     "persona": "Empathetic Sales Lead",
     "role": "Sales Specialist",
-    "voice_gender": "Female",
+    "voice_gender": "Male",
     "instructions": "Focus on high-performance features and emotional connection. Always mention the 0-40km/h sprint time.and",
     "leads_closed": 24,
     "conversion_rate": 18,

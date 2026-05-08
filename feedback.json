@@ -1,5 +1,58 @@
 [
-    {"id": 1, "customer": "Siddharth M.", "rating": 5, "sentiment": "Positive", "summary": "Highly satisfied with the 450X performance and the smooth booking process.", "status": "Verified"},
-    {"id": 2, "customer": "Ananya I.", "rating": 4, "sentiment": "Positive", "summary": "Great family scooter (Rizta). Waiting for delivery.", "status": "Verified"},
-    {"id": 3, "customer": "Rahul S.", "rating": 2, "sentiment": "Negative", "summary": "Charging issue on day 3. Support response was slow.", "status": "Escalated"}
+    {
+        "id": 1,
+        "customer": "Siddharth M.",
+        "rating": 5,
+        "sentiment": "Positive",
+        "summary": "Highly satisfied with the 450X performance and the smooth booking process.",
+        "status": "Verified"
+    },
+    {
+        "id": 2,
+        "customer": "Ananya I.",
+        "rating": 4,
+        "sentiment": "Positive",
+        "summary": "Great family scooter (Rizta). Waiting for delivery.",
+        "status": "Verified"
+    },
+    {
+        "id": 3,
+        "customer": "Rahul S.",
+        "rating": 2,
+        "sentiment": "Negative",
+        "summary": "Charging issue on day 3. Support response was slow.",
+        "status": "Escalated"
+    },
+    {
+        "id": "F304",
+        "customer_name": "Siddharth Malhotra",
+        "phone": "+91 9845012345",
+        "sentiment": "Neutral",
+        "comment": "Customer asked about the 450X 30% discount offer. He is interested in the Space Grey color and wants a test ride scheduled for tomorrow.",
+        "timestamp": "2026-05-08T10:15:00Z"
+    },
+    {
+        "id": "F305",
+        "customer_name": "ಶಿವರಾಜ್",
+        "phone": "2000",
+        "sentiment": "Neutral",
+        "comment": "Agent: Welcome. For English press 1. ಕನ್ನಡಕ್ಕಾಗಿ 2 ಒತ್ತಿರಿ. हिंदी के लिए 3 दबाएं.\nAgent: ಧನ್ಯವಾದಗಳು. ನಿಮ್ಮ ಹೆಸರೇನು?\nCustomer: ನನ್ನ ಹೆಸರು ಶಿವರಾಜ್ ಅಂತ.\nAgent: ನಮಸ್ಕಾರ ಶಿವರಾಜ್ ಅವರೇ! ನಮ್ಮ ಅಥರ್ ಎನರ್ಜಿ ಕುಟುಂಬದ ಸದಸ್ಯರನ್ನು ಸ್ವಾಗತಿಸಲು ನನಗೆ ಸಂತೋಷವಾಗುತ್ತಿದೆ. ನಿಮ್ಮ ಅಗತ್ಯಕ್ಕೆ ತಕ್ಕಂತೆ ನಮ್ಮ ಅಥರ್ ಎಲೆಕ್ಟ್ರಿಕ್ ಸ್ಕೂಟರ",
+        "timestamp": "2026-05-08T19:07:14.798614"
+    },
+    {
+        "id": "F306",
+        "customer_name": "ಶಿವರಾಜ್",
+        "phone": "2000",
+        "sentiment": "Neutral",
+        "comment": "Agent: Welcome. For English press 1. ಕನ್ನಡಕ್ಕಾಗಿ 2 ಒತ್ತಿರಿ. हिंदी के लिए 3 दबाएं.\nAgent: ಧನ್ಯವಾದಗಳು. ನಿಮ್ಮ ಹೆಸರೇನು?\nCustomer: ನನ್ನ ಹೆಸರು ನಿಮ್ಮ ಗೊತ್ತಿಲ್ವಾ\nAgent: ನನ್ನ ಬಳಿ ನಿಮ್ಮ ಹೆಸರು ಮಾಹಿತಿ ಇಲ್ಲ. ದಯವಿಟ್ಟು ನಿಮ್ಮ ಹೆಸರು ತಿಳಿಸಿ.\nCustomer: ನನ್ನ ಹೆಸರು ಶಿವರಾಜ್ ಅಂತ\nAgent: ನಮಸ್ತೆ ಶಿವರಾಜ್, ಏಥರ್-ಗೆ ಸುಸ್ವಾಗತ. ನಾ",
+        "timestamp": "2026-05-08T19:19:49.055492"
+    },
+    {
+        "id": "F307",
+        "customer_name": "Ananya Iyer",
+        "phone": "+91 8050098765",
+        "sentiment": "Neutral",
+        "comment": "Customer expressed interest in the Ather Rizta. She inquired about the storage capacity and the family-friendly features. Test ride booked.",
+        "timestamp": "2026-05-08T09:30:00Z"
+    }
 ]

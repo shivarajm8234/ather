@@ -4,7 +4,7 @@ import {
   UserCog, MessageSquare, BarChart3, Settings, LogOut, 
   Search, Bell, HelpCircle, ChevronDown, Clock, Sparkles,
   AlertCircle, Brain, Network, Smile, TrendingUp, MoreHorizontal,
-  ShieldCheck, Fingerprint, Key, Lock, X, ArrowRight, BrainCircuit, ChevronRight
+  ShieldCheck, Fingerprint, Key, Lock, X, ArrowRight, BrainCircuit, ChevronRight, Plus
 } from 'lucide-react';
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, 
@@ -184,6 +184,9 @@ const App = () => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [selectedFeedback, setSelectedFeedback] = useState(null);
   const [selectedStaff, setSelectedStaff] = useState(null);
+  const [isAddingStaff, setIsAddingStaff] = useState(false);
+  const [selectedService, setSelectedService] = useState(null);
+  const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
   const [leadFilter, setLeadFilter] = useState('all');
 
   const [data, setData] = useState({ leads: [], service: [], calls: [], knowledge: null, staff: [], feedback: [] });
@@ -193,9 +196,14 @@ const App = () => {
   const [lastUpdated, setLastUpdated] = useState(null);
 
   const filteredLeads = (data.leads || []).filter(l => 
-    l.customer_name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
     l.phone?.includes(searchTerm)
   );
+
+  const recentCalls = (data.calls || []).filter(c => {
+    const callTime = new Date(c.timestamp).getTime();
+    const now = new Date().getTime();
+    return (now - callTime) < 15000; // Show for 15 seconds
+  });
 
   useEffect(() => {
     // Sync view with URL path on load
@@ -209,7 +217,7 @@ const App = () => {
     fetch('/api/ip').then(r => r.json()).then(d => setServerIp(d.ip)).catch(() => setServerIp('127.0.0.1'));
     if (authState === 'dashboard') {
         fetchData();
-        const poll = setInterval(fetchData, 5000);
+        const poll = setInterval(fetchData, 3000);
         return () => { clearInterval(timer); clearInterval(poll); };
     }
     return () => clearInterval(timer);
@@ -217,7 +225,7 @@ const App = () => {
 
   const fetchData = async () => {
     try {
-      const fetchJson = (url) => fetch(url).then(r => r.ok ? r.json() : []).catch(() => []);
+      const fetchJson = (url) => fetch(`${url}?t=${Date.now()}`).then(r => r.ok ? r.json() : []).catch(() => []);
       
       const [leads, service, calls, knowledge, staff, feedback] = await Promise.all([
         fetchJson('/api/leads'),
@@ -474,8 +482,43 @@ const App = () => {
         </div>
       </aside>
 
-      {/* Main Content */}
+       {/* Main Content */}
       <main className="flex-1 flex flex-col relative overflow-hidden">
+        {/* Global Active Call Alert */}
+        <AnimatePresence>
+          {recentCalls.length > 0 && (
+            <motion.div 
+              initial={{ y: -50, opacity: 0 }}
+              animate={{ y: 0, opacity: 1 }}
+              exit={{ y: -50, opacity: 0 }}
+              className="absolute top-4 left-1/2 -translate-x-1/2 z-[100] w-[400px]"
+            >
+              <div className="bg-primary/20 backdrop-blur-xl border border-primary/50 rounded-2xl p-4 flex items-center justify-between shadow-[0_0_50px_rgba(var(--primary-rgb),0.3)]">
+                <div className="flex items-center gap-4">
+                  <div className="relative">
+                     <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-white animate-pulse">
+                        <Phone size={18} />
+                     </div>
+                     <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-[#0B0C10] flex items-center justify-center text-[0.5rem] font-bold">
+                        LIVE
+                     </div>
+                  </div>
+                  <div>
+                    <div className="text-xs font-bold text-primary uppercase tracking-widest">Active AI Interaction</div>
+                    <div className="text-sm font-bold text-white">Call from {recentCalls[0].phone}</div>
+                  </div>
+                </div>
+                <button 
+                  onClick={() => setCurrentView('followup')}
+                  className="bg-primary text-white text-[0.65rem] font-bold px-4 py-2 rounded-lg hover:bg-primary/80 transition-all uppercase"
+                >
+                  View Details
+                </button>
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* Header */}
         <header className="h-[72px] px-10 border-b border-white/5 flex items-center justify-between bg-surface-main/80 backdrop-blur-xl z-40">
           <div className="flex items-center gap-8">
@@ -578,7 +621,9 @@ const App = () => {
                 setSelectedStaff,
                 handleUpdateStaff,
                 searchTerm,
-                setSearchTerm
+                setSearchTerm,
+                setSelectedService,
+                setIsServiceModalOpen
               )}
             </motion.div>
           </AnimatePresence>
@@ -592,6 +637,148 @@ const App = () => {
           lead={selectedLead} 
           calls={data.calls} 
         />
+
+        {isServiceModalOpen && selectedService && (
+          <div className="fixed inset-0 z-[110] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsServiceModalOpen(false)}
+              className="absolute inset-0 bg-black/80 backdrop-blur-md"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0 }}
+              animate={{ scale: 1, opacity: 1 }}
+              exit={{ scale: 0.9, opacity: 0 }}
+              className="glass-card w-full max-w-xl p-8 relative z-10 border-primary/30 shadow-2xl"
+            >
+              <header className="flex justify-between items-start mb-6">
+                <div>
+                  <Badge type={selectedService.status === 'Scheduled' ? 'success' : 'warm'}>{selectedService.status}</Badge>
+                  <h3 className="text-2xl font-bold font-outfit mt-3">{selectedService.customer_name}</h3>
+                  <p className="text-slate-400 text-sm">Vehicle: {selectedService.vehicle_no}</p>
+                </div>
+                <button onClick={() => setIsServiceModalOpen(false)} className="p-2 hover:bg-white/5 rounded-lg transition-colors">
+                  <X size={20} className="text-slate-500" />
+                </button>
+              </header>
+              
+              <div className="grid grid-cols-2 gap-4 mb-8">
+                <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
+                  <div className="text-[0.65rem] text-slate-500 uppercase font-bold mb-1">Appointment Time</div>
+                  <div className="text-sm font-bold flex items-center gap-2">
+                    <Clock size={14} className="text-primary" /> {selectedService.appointment_date} | {selectedService.appointment_time}
+                  </div>
+                </div>
+                <div className="p-4 bg-white/5 rounded-2xl border border-white/5">
+                  <div className="text-[0.65rem] text-slate-500 uppercase font-bold mb-1">Station Allotment</div>
+                  <div className="text-sm font-bold flex items-center gap-2">
+                    <Network size={14} className="text-primary" /> {selectedService.station || 'Pending Allotment'}
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-4">
+                <div className="text-sm font-bold border-b border-white/5 pb-2">Service Details</div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-500">Service Type</span>
+                  <span className="text-white font-medium">{selectedService.service_type}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-slate-500">Last Recorded Odometer</span>
+                  <span className="text-white font-medium">{selectedService.current_km} KM</span>
+                </div>
+              </div>
+
+              <div className="mt-10 flex gap-3">
+                <button className="btn-primary flex-1 py-3">Reschedule</button>
+                <button className="flex-1 py-3 bg-white/5 border border-white/10 rounded-xl text-sm font-bold hover:bg-white/10 transition-all">Cancel Booking</button>
+              </div>
+            </motion.div>
+          </div>
+        )}
+        
+        {isAddingStaff && (
+          <div className="fixed inset-0 z-[100] flex items-center justify-center p-6">
+            <motion.div 
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              exit={{ opacity: 0 }}
+              onClick={() => setIsAddingStaff(false)}
+              className="absolute inset-0 bg-black/90 backdrop-blur-xl"
+            />
+            <motion.div 
+              initial={{ scale: 0.9, opacity: 0, y: 20 }}
+              animate={{ scale: 1, opacity: 1, y: 0 }}
+              exit={{ scale: 0.9, opacity: 0, y: 20 }}
+              className="glass-card w-full max-w-2xl p-10 relative z-10 border-primary/30 shadow-2xl"
+            >
+              <h2 className="text-3xl font-bold font-outfit mb-6">Create New AI Specialist</h2>
+              <div className="space-y-6">
+                <div className="grid grid-cols-2 gap-6">
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Agent Name</label>
+                    <input 
+                      type="text" 
+                      id="new-staff-name"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-primary/50"
+                      placeholder="e.g. Luna"
+                    />
+                  </div>
+                  <div className="space-y-2">
+                    <label className="text-xs font-bold text-slate-500 uppercase">Role</label>
+                    <input 
+                      type="text" 
+                      id="new-staff-role"
+                      className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-primary/50"
+                      placeholder="e.g. Sales Expert"
+                    />
+                  </div>
+                </div>
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-500 uppercase">Instructions & Directives</label>
+                  <textarea 
+                    id="new-staff-instructions"
+                    rows={4}
+                    className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-sm text-white outline-none focus:border-primary/50"
+                    placeholder="Focus on high-intent leads..."
+                  />
+                </div>
+                <div className="flex justify-end gap-4 mt-8">
+                   <button onClick={() => setIsAddingStaff(false)} className="px-6 py-3 text-sm font-bold text-slate-400 hover:text-white transition-colors">Cancel</button>
+                   <button 
+                     onClick={() => {
+                       const name = document.getElementById('new-staff-name').value;
+                       const role = document.getElementById('new-staff-role').value;
+                       const instructions = document.getElementById('new-staff-instructions').value;
+                       if (name && role) {
+                         fetch('/api/staff/add', {
+                           method: 'POST',
+                           body: JSON.stringify({
+                             name, role, instructions, 
+                             persona: `${role} AI`, 
+                             voice_gender: 'Female',
+                             conversion_rate: 0,
+                             rating: 5.0,
+                             leads_closed: 0,
+                             knowledge_graph: 'Vehicle Intelligence'
+                           })
+                         }).then(() => {
+                           setIsAddingStaff(false);
+                           window.location.reload();
+                         });
+                       }
+                     }}
+                     className="btn-primary px-10 py-3"
+                   >
+                     Initialize Agent
+                   </button>
+                </div>
+              </div>
+            </motion.div>
+          </div>
+        )}
       </AnimatePresence>
     </div>
   );
@@ -614,7 +801,9 @@ const renderView = (
   setSelectedStaff,
   onUpdateStaff,
   searchTerm,
-  setSearchTerm
+  setSearchTerm,
+  setSelectedService,
+  setIsServiceModalOpen
 ) => {
   const { leads, service, calls, knowledge, staff, feedback } = data;
   
@@ -694,7 +883,7 @@ const renderView = (
                 Performance Velocity <BarChart3 size={18} className="text-slate-500" />
               </h3>
               <div className="h-[300px] min-h-[300px] w-full" style={{ minHeight: '300px' }}>
-                <ResponsiveContainer width="100%" height="100%" minHeight={300}>
+                <ResponsiveContainer width="100%" height="100%" minHeight={300} minWidth={0}>
                   <AreaChart data={performanceData}>
                     <defs>
                       <linearGradient id="colorLeads" x1="0" y1="0" x2="0" y2="1">
@@ -712,7 +901,7 @@ const renderView = (
             <div className="col-span-12 lg:col-span-4 glass-card p-8">
               <h3 className="text-lg font-bold mb-8">Model Interest Split</h3>
               <div className="h-[300px] min-h-[300px] w-full" style={{ minHeight: '300px' }}>
-                <ResponsiveContainer width="100%" height="100%" minHeight={300}>
+                <ResponsiveContainer width="100%" height="100%" minHeight={300} minWidth={0}>
                   <PieChart>
                     <Pie
                       data={modelData}
@@ -934,7 +1123,7 @@ const renderView = (
                  </div>
               </div>
               <div className="h-[250px] min-h-[250px] w-full" style={{ minHeight: '250px' }}>
-                <ResponsiveContainer width="100%" height="100%" minHeight={250}>
+                <ResponsiveContainer width="100%" height="100%" minHeight={300} minWidth={0}>
                   <AreaChart data={sentimentData}>
                      <Area type="monotone" dataKey="score" stroke="#10b981" fill="#10b981" fillOpacity={0.1} strokeWidth={4} />
                   </AreaChart>
@@ -1061,7 +1250,14 @@ const renderView = (
               </thead>
               <tbody className="divide-y divide-white/5">
                 {(service || []).map(s => (
-                  <tr key={s.id} className="hover:bg-white/2 transition-colors">
+                  <tr 
+                    key={s.id} 
+                    className="hover:bg-white/2 transition-colors cursor-pointer"
+                    onClick={() => {
+                      setSelectedService(s);
+                      setIsServiceModalOpen(true);
+                    }}
+                  >
                     <td className="px-8 py-5">
                        <div className="font-bold text-sm">{s.customer_name}</div>
                        <div className="text-[0.65rem] text-slate-500 flex items-center gap-1 mt-1">
@@ -1097,9 +1293,17 @@ const renderView = (
     case 'staff':
       return (
         <div className="space-y-10">
-          <header>
-            <h1 className="text-4xl font-bold font-outfit mb-2">Staff Management</h1>
-            <p className="text-slate-400">Performance analysis and AI-assisted lead assignment.</p>
+          <header className="flex justify-between items-end">
+            <div>
+              <h1 className="text-4xl font-bold font-outfit mb-2">Staff Management</h1>
+              <p className="text-slate-400">Performance analysis and AI-assisted lead assignment.</p>
+            </div>
+            <button 
+              onClick={() => setIsAddingStaff(true)}
+              className="btn-primary flex items-center gap-2"
+            >
+              <Plus size={18} /> Create New AI Specialist
+            </button>
           </header>
           <div className="glass-card p-8 border-primary/20 bg-primary/5">
              <Badge>ASSIGNMENT INTELLIGENCE</Badge>
@@ -1135,7 +1339,7 @@ const renderView = (
                     </td>
                     <td className="px-8 py-5">
                        <Badge type={s.voice_gender === 'Female' ? 'success' : 'default'}>
-                          {s.voice_gender === 'Female' ? 'Female (Girl)' : 'Male (Boy)'}
+                          {s.voice_gender === 'Female' ? 'FEMALE (GIRL)' : 'MALE (BOY)'} | {s.voice_gender === 'Female' ? 'Priya' : (s.name === 'Zephyr' ? 'Kumar' : 'Mani')}
                        </Badge>
                     </td>
                     <td className="px-8 py-5">
@@ -1187,7 +1391,7 @@ const renderView = (
                   <div className="grid grid-cols-2 gap-10 relative">
                      <div className="space-y-8">
                         <div className="space-y-3">
-                           <label className="text-[0.65rem] font-bold text-slate-500 uppercase tracking-widest pl-1">Vocal Identity (Gender)</label>
+                           <label className="text-[0.65rem] font-bold text-slate-500 uppercase tracking-widest pl-1">Vocal Identity (Gender) | Sarvam bulbul:v2</label>
                            <div className="grid grid-cols-2 gap-3 p-1.5 bg-white/5 rounded-2xl border border-white/5">
                               <button 
                                 onClick={() => setSelectedStaff({...selectedStaff, voice_gender: 'Male'})}
@@ -1201,6 +1405,9 @@ const renderView = (
                               >
                                 FEMALE (GIRL)
                               </button>
+                           </div>
+                           <div className="text-[0.6rem] text-slate-500 font-bold uppercase tracking-wider pl-1">
+                              Speaker: <span className="text-primary">{selectedStaff.voice_gender === 'Female' ? 'Priya' : (selectedStaff.name === 'Zephyr' ? 'Kumar' : 'Mani')}</span>
                            </div>
                         </div>
 
@@ -1413,7 +1620,7 @@ const renderView = (
           <div className="glass-card p-8">
              <h3 className="text-lg font-bold mb-8">Lead Volume Trend</h3>
              <div className="h-[300px] min-h-[300px] w-full">
-                <ResponsiveContainer width="100%" height="100%">
+                <ResponsiveContainer width="100%" height="100%" minHeight={300} minWidth={0}>
                   <BarChart data={monthlyReportData}>
                     <Bar dataKey="vol" fill="#20b2aa" radius={[10, 10, 0, 0]} />
                     <XAxis dataKey="name" stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
