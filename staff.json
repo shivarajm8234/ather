@@ -1,0 +1,5 @@
+[
+    {"id": 1, "name": "Sneha Kapoor", "role": "Sales Specialist", "leads_closed": 24, "conversion_rate": 18, "avg_response": "12m", "rating": 4.9},
+    {"id": 2, "name": "Rohan Mehta", "role": "Product Specialist", "leads_closed": 18, "conversion_rate": 12, "avg_response": "45m", "rating": 4.7},
+    {"id": 3, "name": "Alex Richardson", "role": "Showroom Manager", "leads_closed": 5, "conversion_rate": 22, "avg_response": "5m", "rating": 5.0}
+]

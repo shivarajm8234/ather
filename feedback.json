@@ -1,0 +1,5 @@
+[
+    {"id": 1, "customer": "Siddharth M.", "rating": 5, "sentiment": "Positive", "summary": "Highly satisfied with the 450X performance and the smooth booking process.", "status": "Verified"},
+    {"id": 2, "customer": "Ananya I.", "rating": 4, "sentiment": "Positive", "summary": "Great family scooter (Rizta). Waiting for delivery.", "status": "Verified"},
+    {"id": 3, "customer": "Rahul S.", "rating": 2, "sentiment": "Negative", "summary": "Charging issue on day 3. Support response was slow.", "status": "Escalated"}
+]

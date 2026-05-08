@@ -1,0 +1,13 @@
+[
+    {
+        "id": "S201",
+        "customer_name": "Rajesh Kumar",
+        "phone": "+91 9988776655",
+        "vehicle_no": "KA 05 MN 4321",
+        "current_km": 5100,
+        "service_type": "5,000 km Service",
+        "status": "Due Soon",
+        "last_contact": "2026-05-07",
+        "missed": false
+    }
+]

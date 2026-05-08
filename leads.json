@@ -1,0 +1,22 @@
+[
+    {
+        "id": "L101",
+        "customer_name": "Siddharth Malhotra",
+        "phone": "+91 9845012345",
+        "source": "Voice AI",
+        "priority": "Hot",
+        "status": "New Enquiry",
+        "timestamp": "2026-05-08T10:15:00Z",
+        "notes": "Inquired about 450X 30% discount. Interested in Space Grey."
+    },
+    {
+        "id": "L102",
+        "customer_name": "Ananya Iyer",
+        "phone": "+91 8050098765",
+        "source": "Website",
+        "priority": "Medium",
+        "status": "Test Ride",
+        "timestamp": "2026-05-08T09:30:00Z",
+        "notes": "Booked test ride for Ather Rizta."
+    }
+]

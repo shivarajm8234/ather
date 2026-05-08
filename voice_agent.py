@@ -8,6 +8,7 @@ import json
 from datetime import datetime
 from dotenv import load_dotenv
 from asterisk.agi import AGI
+import retail_agent_utils
 
 # Load environment variables from absolute path
 ENV_PATH = "/home/satoru/Desktop/ds/.env"
@@ -31,6 +32,8 @@ class MultilingualVoiceAgent:
         self.language = "en-IN"
         self.recording_path = "/tmp/user_input"
         self.conversation = []
+        self.user_profile = {}
+        self.caller_id = self.agi.get_variable("CALLERID(num)") or "Unknown"
         
     def log(self, message):
         """Styled logging for Asterisk console."""
@@ -98,7 +101,7 @@ class MultilingualVoiceAgent:
 
     def get_llm_response(self, text):
         """Get response from Sarvam AI LLM with Knowledge Graph context."""
-        self.log("Thinking (Sarvam LLM + Knowledge Graph)...")
+        self.log("Thinking (Sales & Retail Brain)...")
         
         # Load Knowledge Graph
         try:
@@ -112,18 +115,53 @@ class MultilingualVoiceAgent:
             "Content-Type": "application/json"
         }
         
+        # Load User History
+        history_context = ""
+        if self.user_profile.get("history"):
+            last_chats = self.user_profile["history"][-2:] # Get last 2 summaries
+            history_context = "PREVIOUS CONVERSATIONS:\n" + "\n".join(last_chats)
+
+        # Extract offers from knowledge graph if available
+        offers_text = "Check current availability."
+        try:
+            kg_data = json.loads(knowledge)
+            offers = []
+            for p in kg_data.get("products", []):
+                if p.get("current_offers"):
+                    offers.append(f"- {p['name']}: {p['current_offers']}")
+            if offers:
+                offers_text = "\n".join(offers)
+        except:
+            pass
+
         prompt = f"""
-        You are a highly professional sales assistant for Ather Energy.
-        Use the following Knowledge Graph (Categorized Data) to answer the user:
+        You are a highly professional sales and service assistant for Ather Energy.
+        
+        IDENTITY:
+        Customer Name: {self.user_profile.get('name', 'Unknown')}
+        Customer Phone: {self.caller_id}
+        
+        CONTEXT:
         {knowledge}
         
-        CRITICAL INSTRUCTIONS:
-        1. Answer ONLY using the facts from the Knowledge Graph above. Do not guess or make up details.
-        2. If the user asks about something NOT in the graph, say "I don't have that information right now, but I can check for you."
-        3. Speak in {self.language}.
-        4. Be very concise (phone call style, max 1 or 2 sentences).
+        {history_context}
         
         USER QUERY: {text}
+
+        AVAILABLE OFFERS (Mention these voluntarily if appropriate):
+        {offers_text}
+
+        RETAIL RULES:
+        1. If the user wants to BUY or asks for PRICE/DISCOUNT, answer and then say: "I have noted your interest. Our specialist will call you back shortly."
+        2. If the user asks for a service or says their vehicle is due, remind them about the 5k/10k km checkups and mention that regular service extends battery life.
+        3. If the user asks to speak to a person and specialists are busy, offer to schedule a priority callback.
+        4. Be very concise (max 2 sentences).
+        5. Speak in {self.language}.
+        
+        INTERNAL TAGGING (MUST INCLUDE AT THE END):
+        [HOT_LEAD] if interested in buying or high-value offers.
+        [SERVICE_QUERY] if interested in service.
+        [UPDATE_NAME: <name>] if the user tells you their name.
         """
         
         payload = {
@@ -132,11 +170,28 @@ class MultilingualVoiceAgent:
         }
         
         try:
-            # Using Sarvam's chat endpoint
             response = requests.post("https://api.sarvam.ai/v1/chat/completions", json=payload, headers=headers)
             if response.status_code == 200:
                 content = response.json()["choices"][0]["message"].get("content")
                 if content:
+                    # Logic to log leads based on tags
+                    if "[HOT_LEAD]" in content:
+                        retail_agent_utils.add_lead(self.user_profile.get("name", "Unknown"), self.caller_id, notes=text, priority="Hot")
+                        content = content.replace("[HOT_LEAD]", "").strip()
+                    
+                    if "[UPDATE_NAME:" in content:
+                        # Extract name: [UPDATE_NAME: John]
+                        try:
+                            new_name = content.split("[UPDATE_NAME:")[1].split("]")[0].strip()
+                            self.user_profile["name"] = new_name
+                            content = content.split("[UPDATE_NAME:")[0] + content.split("]")[1]
+                        except:
+                            pass
+                        content = content.strip()
+
+                    if "[SERVICE_QUERY]" in content:
+                        content = content.replace("[SERVICE_QUERY]", "").strip()
+                        
                     return content
                 else:
                     self.log("LLM returned empty content.")
@@ -149,7 +204,7 @@ class MultilingualVoiceAgent:
         if self.language == "kn-IN":
             return "ಕ್ಷಮಿಸಿ, ಈ ಮಾಹಿತಿಯನ್ನು ಒದಗಿಸಲು ಸಾಧ್ಯವಾಗುತ್ತಿಲ್ಲ."
         elif self.language == "hi-IN":
-            return "क्षमा करें, मैं इस समय इसका उत्तर नहीं दे सकता।"
+            return "ಕ್ಷಮಿಸಿ, ಈ ಮಾಹಿತಿಯನ್ನು ಒದಗಿಸಲು ಸಾಧ್ಯವಾಗುತ್ತಿಲ್ಲ."
         return "I'm sorry, I couldn't process that."
 
     def run(self):
@@ -164,16 +219,28 @@ class MultilingualVoiceAgent:
             digit = self.agi.wait_for_digit(4000)
             self.log(f"Digit received: {digit}")
             
+            # Load User Profile
+            self.user_profile = retail_agent_utils.get_user_profile(self.caller_id)
+
             if digit == '2':
                 self.language = "kn-IN"
-                self.say("ಧನ್ಯವಾದಗಳು. ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಬಹುದು?")
+                if self.user_profile.get("name") == "Unknown":
+                    self.say("ಧನ್ಯವಾದಗಳು. ನಿಮ್ಮ ಹೆಸರೇನು?")
+                else:
+                    self.say(f"ಹಲೋ {self.user_profile['name']}, ನಾನು ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಬಹುದು?")
             elif digit == '3':
                 self.language = "hi-IN"
-                self.say("धन्यवाद। मैं आपकी क्या सहायता कर सकता हूँ?")
+                if self.user_profile.get("name") == "Unknown":
+                    self.say("धन्यवाद। आपका नाम क्या है?")
+                else:
+                    self.say(f"नमस्ते {self.user_profile['name']}, मैं आपकी क्या सहायता कर सकता हूँ?")
             else:
                 # Default to English (1 or timeout)
                 self.language = "en-IN"
-                self.say("Thank you. How can I help you today?")
+                if self.user_profile.get("name") == "Unknown":
+                    self.say("Thank you. May I know your name please?")
+                else:
+                    self.say(f"Hello {self.user_profile['name']}. How can I help you today?")
                 
             # Conversation Loop (3 turns)
             for i in range(3):
@@ -199,26 +266,35 @@ class MultilingualVoiceAgent:
                 unique_id = self.agi.get_variable("UNIQUEID") or datetime.now().strftime("%Y%m%d_%H%M%S")
                 log_dir = "/home/satoru/Desktop/ds/calls"
                 
-                # Ensure directory exists (will fail if no permissions, caught by except)
+                # Ensure directory exists
                 if not os.path.exists(log_dir):
                     os.makedirs(log_dir, exist_ok=True)
                 
                 log_file = f"{log_dir}/call_{unique_id}.json"
                 
+                # Create human language summary
+                human_summary = retail_agent_utils.summarize_conversation(self.conversation)
+                
                 call_data = {
                     "unique_id": unique_id,
+                    "phone": self.caller_id,
+                    "customer_name": self.user_profile.get("name", "Unknown"),
                     "timestamp": datetime.now().isoformat(),
                     "language": self.language,
+                    "summary": human_summary,
                     "conversation": self.conversation
                 }
                 
                 with open(log_file, "w") as f:
                     json.dump(call_data, f, indent=4)
+                
+                # Update user profile history
+                self.user_profile["history"].append(f"Call on {datetime.now().strftime('%Y-%m-%d')}: {human_summary[:100]}...")
+                retail_agent_utils.save_user_profile(self.user_profile)
                     
-                self.log(f"Conversation saved to {log_file}")
+                self.log(f"Conversation saved and user profile updated.")
             except Exception as json_e:
                 self.log(f"Failed to save JSON: {str(json_e)}")
-                self.log("TIP: Run 'sudo chmod 777 /home/satoru/Desktop/ds' to fix permissions.")
                 
             self.agi.hangup()
 

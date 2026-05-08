@@ -1,0 +1,12 @@
+{
+  "name": "ather-ai",
+  "version": "1.0.0",
+  "description": "Ather AI Intelligence Showroom System",
+  "main": "run.sh",
+  "scripts": {
+    "start": "./run.sh",
+    "build:ui": "cd dashboard-new && npm run build && cp -r dist/* ../dashboard/"
+  },
+  "author": "Antigravity",
+  "license": "ISC"
+}

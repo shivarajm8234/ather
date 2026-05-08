@@ -2,37 +2,69 @@
     "business_info": {
         "name": "Ather Energy Showroom",
         "location": "Bengaluru",
-        "timings": "9 AM to 8 PM"
+        "timings": "9 AM to 8 PM",
+        "contact": "+91 80 1234 5678"
     },
     "products": [
         {
             "name": "Ather 450X",
-            "price": "1,40,000 INR",
-            "range": "150 km",
-            "colors": [
-                "Space Grey",
-                "White",
-                "Mint"
-            ],
-            "discount": "30%"
+            "battery_capacity": "3.7 kWh",
+            "certified_range": "150 km",
+            "true_range": "110 km",
+            "top_speed": "90 km/h",
+            "acceleration_0_40": "3.3 sec",
+            "price_starting": "1,44,921 INR",
+            "colors": ["Cosmic Black", "Lunar Grey", "Salt White", "Space Grey", "Still White", "True Red"],
+            "current_offers": "30% off on specific inventory"
         },
         {
             "name": "Ather 450S",
-            "price": "1,10,000 INR",
-            "range": "115 km",
-            "colors": [
-                "Salt White",
-                "Cosmic Black"
-            ],
-            "discount": "50%"
+            "battery_capacity": "2.9 kWh",
+            "certified_range": "115 km",
+            "true_range": "90 km",
+            "top_speed": "90 km/h",
+            "acceleration_0_40": "3.9 sec",
+            "price_starting": "1,17,599 INR",
+            "colors": ["Salt White", "Cosmic Black", "Space Grey", "Still White"],
+            "current_offers": "50% off for limited period"
+        },
+        {
+            "name": "Ather 450 Apex",
+            "battery_capacity": "3.7 kWh",
+            "certified_range": "157 km",
+            "top_speed": "100 km/h",
+            "acceleration_0_40": "2.9 sec",
+            "price_starting": "1,88,999 INR",
+            "special_feature": "Indium Blue finish with transparent panels",
+            "warp_plus_mode": "Included"
+        },
+        {
+            "name": "Ather Rizta",
+            "segment": "Family Scooter",
+            "seat_size": "Largest in category",
+            "storage": "34L underseat + 22L optional Frunk",
+            "range_options": ["123 km", "160 km"],
+            "top_speed": "80 km/h",
+            "price_starting": "1,09,999 INR"
         }
     ],
-    "faq": {
-        "charging_time": "0 to 80% in 5 hours and 45 minutes",
-        "warranty": "3 years or 30,000 km"
+    "service_info": {
+        "intervals": [
+            {"milestone": "5,000 km", "type": "Periodic Maintenance"},
+            {"milestone": "10,000 km", "type": "Periodic Maintenance"},
+            {"milestone": "20,000 km", "type": "Major Service"}
+        ],
+        "benefits": [
+            "Extends battery health and life",
+            "Ensures optimal braking performance",
+            "Firmware updates included",
+            "Safety checks on belt tension and tires"
+        ],
+        "battery_warranty": "5 years or 60,000 km (Ather Battery Protect)"
     },
-    "greeting": "hi",
-    "uncategorized_updates": [
-        "> Kiyotoka:\ndiscount on 450 series model of 50 perchentage"
-    ]
+    "faq": {
+        "charging_time": "0 to 80% in 5 hours 45 mins (Home Charging)",
+        "fast_charging": "Ather Grid: 1.5 km/min up to 80%",
+        "connectivity": "Ather Connect Pro (Google Maps, Bluetooth Call/Music, OTA updates)"
+    }
 }

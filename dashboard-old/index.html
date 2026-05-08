@@ -1,0 +1,117 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ather AI | Enterprise Showroom Intelligence</title>
+    <link rel="stylesheet" href="style.css">
+    <!-- Lucide Icons -->
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <!-- ApexCharts -->
+    <script src="https://cdn.jsdelivr.net/npm/apexcharts"></script>
+</head>
+<body>
+    <div class="app-layout">
+        <!-- Sidebar Navigation -->
+        <aside class="sidebar">
+            <div class="sidebar-header">
+                <div class="logo-container">
+                    <i data-lucide="zap" style="color: #fff; width: 24px; height: 24px;"></i>
+                </div>
+                <span class="logo-text outfit">Ather AI</span>
+            </div>
+
+            <nav class="nav-menu no-scrollbar">
+                <div class="nav-group-label">Intelligence</div>
+                <a class="nav-item active" data-view="dashboard">
+                    <i data-lucide="layout-dashboard" size="18"></i> Dashboard
+                </a>
+                <a class="nav-item" data-view="leads">
+                    <i data-lucide="users" size="18"></i> Lead Management
+                </a>
+                <a class="nav-item" data-view="pipeline">
+                    <i data-lucide="trello" size="18"></i> Sales Pipeline
+                </a>
+                <a class="nav-item" data-view="followup">
+                    <i data-lucide="phone-call" size="18"></i> AI Follow-up Center
+                </a>
+
+                <div class="nav-group-label">Operations</div>
+                <a class="nav-item" data-view="service">
+                    <i data-lucide="wrench" size="18"></i> Service Center
+                </a>
+                <a class="nav-item" data-view="staff">
+                    <i data-lucide="user-cog" size="18"></i> Staff Management
+                </a>
+                <a class="nav-item" data-view="feedback">
+                    <i data-lucide="message-square" size="18"></i> Customer Feedback
+                </a>
+
+                <div class="nav-group-label">Analytics</div>
+                <a class="nav-item" data-view="reports">
+                    <i data-lucide="bar-chart-3" size="18"></i> Global Reports
+                </a>
+                <a class="nav-item" data-view="settings">
+                    <i data-lucide="settings" size="18"></i> System Settings
+                </a>
+            </nav>
+
+            <div class="sidebar-footer" style="padding: 1.5rem; border-top: 1px solid var(--border);">
+                <div class="nav-item" style="margin-bottom: 0;">
+                    <i data-lucide="log-out" size="18"></i> Sign Out
+                </div>
+            </div>
+        </aside>
+
+        <!-- Main Content -->
+        <main class="main-content">
+            <!-- Top Navbar -->
+            <header class="top-bar">
+                <div style="display: flex; align-items: center; gap: 2rem;">
+                    <div class="search-container">
+                        <i data-lucide="search" size="18" style="color: var(--text-muted);"></i>
+                        <input type="text" class="search-input" placeholder="Search customers, leads, or VIN...">
+                    </div>
+                    <div style="border-left: 1px solid var(--border); padding-left: 2rem; display: flex; align-items: center; gap: 1rem;">
+                        <i data-lucide="clock" size="18" style="color: var(--primary);"></i>
+                        <span id="current-time" style="font-size: 0.875rem; font-weight: 600; color: var(--text-secondary);">--:--:--</span>
+                    </div>
+                </div>
+
+                <div class="top-bar-actions">
+                    <div class="icon-btn">
+                        <i data-lucide="bell" size="22"></i>
+                        <span class="badge-dot"></span>
+                    </div>
+                    <div class="icon-btn">
+                        <i data-lucide="help-circle" size="22"></i>
+                    </div>
+                    
+                    <div class="user-profile">
+                        <div style="text-align: right;">
+                            <div style="font-size: 0.875rem; font-weight: 600;">Alex Richardson</div>
+                            <div style="font-size: 0.75rem; color: var(--text-muted);">Showroom Manager</div>
+                        </div>
+                        <div class="user-avatar"></div>
+                        <i data-lucide="chevron-down" size="16" style="color: var(--text-muted);"></i>
+                    </div>
+                </div>
+            </header>
+
+            <!-- Dynamic View Container -->
+            <div id="view-root" class="view-container no-scrollbar">
+                <!-- Content will be injected here by script.js -->
+            </div>
+        </main>
+    </div>
+
+    <!-- Modals / Overlays -->
+    <div id="modal-container" style="display: none;"></div>
+
+    <script src="script.js"></script>
+    <script>
+        // Initialize Lucide Icons
+        lucide.createIcons();
+    </script>
+</body>
+</html>
