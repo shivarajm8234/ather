@@ -1,5 +1,7 @@
 {
     "username": "admin@ather.energy",
     "password_hash": "9b74a18e9f8b63f5225cec6674f138f23a2a1623bfd8e75f134855fd30b906c1",
-    "totp_secret": "BXFALVAJTPUOKCPQDQWE4ULNFERB7OER"
+    "totp_secret": "BXFALVAJTPUOKCPQDQWE4ULNFERB7OER",
+    "name": "Alex Richardson",
+    "role": "Showroom Manager"
 }

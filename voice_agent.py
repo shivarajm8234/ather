@@ -32,8 +32,29 @@ class MultilingualVoiceAgent:
         self.language = "en-IN"
         self.recording_path = "/tmp/user_input"
         self.conversation = []
-        self.user_profile = {}
         self.caller_id = self.agi.get_variable("CALLERID(num)") or "Unknown"
+        self.load_active_agent()
+        
+    def load_active_agent(self):
+        """Load the active AI persona configuration."""
+        try:
+            # Check for a specific 'active_agent.json' or default to the first one in staff.json
+            active_path = "/home/satoru/Desktop/ds/active_agent.json"
+            if os.path.exists(active_path):
+                with open(active_path, "r") as f:
+                    self.active_agent = json.load(f)
+            else:
+                with open("/home/satoru/Desktop/ds/staff.json", "r") as f:
+                    staff = json.load(f)
+                    self.active_agent = staff[0]
+            self.log(f"Active Persona: {self.active_agent['name']} ({self.active_agent['voice_gender']})")
+        except Exception as e:
+            self.log(f"Failed to load agent: {e}")
+            self.active_agent = {
+                "name": "Aura", 
+                "voice_gender": "Female", 
+                "instructions": "Be professional and helpful."
+            }
         
     def log(self, message):
         """Styled logging for Asterisk console."""
@@ -49,10 +70,13 @@ class MultilingualVoiceAgent:
         self.log(f"Responding in {lang_code}: {text}")
         self.conversation.append({"role": "agent", "content": text, "lang": lang_code})
         
+        # Select speaker based on persona voice_gender
+        speaker = "priya" if self.active_agent.get("voice_gender") == "Female" else "mani"
+        
         payload = {
             "inputs": [text],
             "target_language_code": lang_code,
-            "speaker": "priya",
+            "speaker": speaker,
             "speech_sample_rate": 8000,
             "enable_preprocessing": True,
             "model": "bulbul:v3"
@@ -138,6 +162,7 @@ class MultilingualVoiceAgent:
         You are a highly professional sales and service assistant for Ather Energy.
         
         IDENTITY:
+        Today's Date: {datetime.now().strftime('%Y-%m-%d')}
         Customer Name: {self.user_profile.get('name', 'Unknown')}
         Customer Phone: {self.caller_id}
         
@@ -151,16 +176,21 @@ class MultilingualVoiceAgent:
         AVAILABLE OFFERS (Mention these voluntarily if appropriate):
         {offers_text}
 
-        RETAIL RULES:
+        RETAIL RULES & PERSONA GUIDELINES:
+        Agent Name: {self.active_agent['name']}
+        Behavioral Directives: {self.active_agent.get('instructions', '')}
+        
         1. If the user wants to BUY or asks for PRICE/DISCOUNT, answer and then say: "I have noted your interest. Our specialist will call you back shortly."
         2. If the user asks for a service or says their vehicle is due, remind them about the 5k/10k km checkups and mention that regular service extends battery life.
-        3. If the user asks to speak to a person and specialists are busy, offer to schedule a priority callback.
-        4. Be very concise (max 2 sentences).
-        5. Speak in {self.language}.
+        3. If the user wants to book a service, check if they have a preferred date/time. If so, use the tag [BOOK_SERVICE: YYYY-MM-DD HH:MM] where HH:MM is on the hour (e.g. 10:00, 11:00).
+        4. If the user asks to speak to a person and specialists are busy, offer to schedule a priority callback.
+        5. Be very concise (max 2 sentences).
+        6. Speak in {self.language}.
         
         INTERNAL TAGGING (MUST INCLUDE AT THE END):
         [HOT_LEAD] if interested in buying or high-value offers.
         [SERVICE_QUERY] if interested in service.
+        [BOOK_SERVICE: YYYY-MM-DD HH:MM] for booking.
         [UPDATE_NAME: <name>] if the user tells you their name.
         """
         
@@ -179,6 +209,20 @@ class MultilingualVoiceAgent:
                         retail_agent_utils.add_lead(self.user_profile.get("name", "Unknown"), self.caller_id, notes=text, priority="Hot")
                         content = content.replace("[HOT_LEAD]", "").strip()
                     
+                    if "[BOOK_SERVICE:" in content:
+                        # Extract date/time: [BOOK_SERVICE: 2026-05-09 14:00]
+                        try:
+                            booking_info = content.split("[BOOK_SERVICE:")[1].split("]")[0].strip()
+                            b_date, b_time = booking_info.split(" ")
+                            success, msg = retail_agent_utils.book_service_slot(self.user_profile.get("name", "Unknown"), self.caller_id, b_date, b_time)
+                            if success:
+                                content = content.split("[BOOK_SERVICE:")[0] + f" (Confirmed: {msg}) " + content.split("]")[1]
+                            else:
+                                content = content.split("[BOOK_SERVICE:")[0] + " (Slot Full, try another time) " + content.split("]")[1]
+                        except:
+                            pass
+                        content = content.strip()
+
                     if "[UPDATE_NAME:" in content:
                         # Extract name: [UPDATE_NAME: John]
                         try:

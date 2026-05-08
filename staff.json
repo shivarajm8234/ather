@@ -1,5 +1,38 @@
 [
-    {"id": 1, "name": "Sneha Kapoor", "role": "Sales Specialist", "leads_closed": 24, "conversion_rate": 18, "avg_response": "12m", "rating": 4.9},
-    {"id": 2, "name": "Rohan Mehta", "role": "Product Specialist", "leads_closed": 18, "conversion_rate": 12, "avg_response": "45m", "rating": 4.7},
-    {"id": 3, "name": "Alex Richardson", "role": "Showroom Manager", "leads_closed": 5, "conversion_rate": 22, "avg_response": "5m", "rating": 5.0}
+    {
+        "id": 1,
+        "name": "Aura",
+        "persona": "Empathetic Sales Lead",
+        "role": "Sales Specialist",
+        "voice_gender": "Female",
+        "instructions": "Focus on high-performance features and emotional connection. Always mention the 0-40km/h sprint time.and",
+        "leads_closed": 24,
+        "conversion_rate": 18,
+        "rating": 4.9,
+        "knowledge_graph": "Vehicle Intelligence"
+    },
+    {
+        "id": 2,
+        "name": "Kavi",
+        "persona": "Technical Service Expert",
+        "role": "Product Specialist",
+        "voice_gender": "Male",
+        "instructions": "Be precise and analytical. Focus on battery health and charging cycles. Use technical terminology.",
+        "leads_closed": 18,
+        "conversion_rate": 12,
+        "rating": 4.7,
+        "knowledge_graph": "Battery & Hardware"
+    },
+    {
+        "id": 3,
+        "name": "Zephyr",
+        "persona": "Strategic Showroom Manager",
+        "role": "Operations Manager",
+        "voice_gender": "Male",
+        "instructions": "High-level authority. Resolve escalations with exclusive offers. Emphasize brand legacy and trust.",
+        "leads_closed": 5,
+        "conversion_rate": 22,
+        "rating": 5.0,
+        "knowledge_graph": "Business Operations"
+    }
 ]

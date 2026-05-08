@@ -5,6 +5,10 @@ from datetime import datetime
 
 LEADS_FILE = "/home/satoru/Desktop/ds/leads.json"
 SERVICE_FILE = "/home/satoru/Desktop/ds/service_records.json"
+AVAILABILITY_FILE = "/home/satoru/Desktop/ds/service_availability.json"
+
+STATIONS = ["Station A", "Station B", "Station C"]
+WORKING_HOURS = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"]
 
 def load_data(file_path):
     if not os.path.exists(file_path):
@@ -21,6 +25,17 @@ def save_data(file_path, data):
 
 def add_lead(name, phone, source="Voice Call", notes="", priority="Medium"):
     leads = load_data(LEADS_FILE)
+    
+    # --- Agentic Allotment Logic ---
+    staff_file = "/home/satoru/Desktop/ds/staff.json"
+    staff_members = load_data(staff_file)
+    assigned_to = "Unassigned"
+    
+    if staff_members:
+        # Sort by conversion rate descending and take the best one
+        best_agent = sorted(staff_members, key=lambda x: x.get('conversion_rate', 0), reverse=True)[0]
+        assigned_to = best_agent.get('name', 'Unassigned')
+    
     new_lead = {
         "id": str(uuid.uuid4())[:8],
         "customer_name": name,
@@ -29,7 +44,8 @@ def add_lead(name, phone, source="Voice Call", notes="", priority="Medium"):
         "priority": priority,
         "status": "New Enquiry",
         "timestamp": datetime.now().isoformat(),
-        "notes": notes
+        "notes": notes,
+        "assigned_to": assigned_to
     }
     leads.insert(0, new_lead)
     save_data(LEADS_FILE, leads)
@@ -79,6 +95,58 @@ def summarize_conversation(conversation):
         role = "Agent" if msg["role"] == "agent" else "Customer"
         summary_parts.append(f"{role}: {msg['content']}")
     return "\n".join(summary_parts)
+
+def get_available_slots(date_str):
+    """Check availability across 3 stations for a specific date."""
+    bookings = load_data(AVAILABILITY_FILE)
+    date_bookings = [b for b in bookings if b["date"] == date_str]
+    
+    available = {}
+    for hour in WORKING_HOURS:
+        hour_bookings = [b for b in date_bookings if b["time"] == hour]
+        busy_stations = [b["station"] for b in hour_bookings]
+        free_stations = [s for s in STATIONS if s not in busy_stations]
+        if free_stations:
+            available[hour] = free_stations
+            
+    return available
+
+def book_service_slot(name, phone, date_str, time_str):
+    """Autonomous allotment: Find first free station and book it."""
+    available = get_available_slots(date_str)
+    if time_str not in available:
+        return False, "Slot unavailable"
+    
+    station = available[time_str][0] # Pick the first available station
+    
+    # Update Availability
+    bookings = load_data(AVAILABILITY_FILE)
+    bookings.append({
+        "date": date_str,
+        "time": time_str,
+        "station": station,
+        "customer": name
+    })
+    save_data(AVAILABILITY_FILE, bookings)
+    
+    # Update Service Records
+    records = load_data(SERVICE_FILE)
+    new_service = {
+        "id": f"S{str(uuid.uuid4())[:4].upper()}",
+        "customer_name": name,
+        "phone": phone,
+        "vehicle_no": "KA-MN-NEW",
+        "current_km": 0,
+        "service_type": "Autonomous Allotment",
+        "status": "Scheduled",
+        "appointment_date": date_str,
+        "appointment_time": time_str,
+        "station": station
+    }
+    records.append(new_service)
+    save_data(SERVICE_FILE, records)
+    
+    return True, f"Booked at {station} for {time_str}"
 
 if __name__ == "__main__":
     print("Retail Agent Utils Loaded.")
