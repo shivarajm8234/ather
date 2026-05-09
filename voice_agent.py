@@ -183,8 +183,11 @@ class MultilingualVoiceAgent:
         if current_chunk: chunks.append(current_chunk)
         if not chunks and text_for_tts: chunks = [text_for_tts]
 
+        digit = None
         for chunk in chunks:
-            self._say_chunk(chunk, lang_code)
+            digit = self._say_chunk(chunk, lang_code)
+            if digit: return digit
+        return digit
 
     def _say_chunk(self, text_for_tts, lang_code):
         if not text_for_tts.strip(): return
@@ -237,7 +240,11 @@ class MultilingualVoiceAgent:
                     audio_content = audios[0]
                     with open(f"{self.resp_path}.wav", "wb") as f:
                         f.write(base64.b64decode(audio_content))
-                    self.agi.stream_file(self.resp_path)
+                    # Allow DTMF interruption for language selection menu
+                    digit = self.agi.stream_file(self.resp_path, escape_digits="123")
+                    if digit:
+                        # Asterisk returns the digit as a string
+                        return digit
                 else:
                     self.log(f"TTS Error: No audio in response. Body: {response.text}")
             else:
@@ -383,6 +390,7 @@ class MultilingualVoiceAgent:
            - If the customer asks "When is my schedule?", read their 'USER SERVICE STATUS'. Do NOT attempt to create a new booking.
            - Check the BUSY SLOTS: {', '.join(busy_slots) if busy_slots else 'None'}. Suggest available times if their requested time is busy.
            - DOUBLE BOOKING PREVENTION: Check the 'USER SERVICE STATUS' above. If they have a 'Scheduled' appointment, REFUSE to book a new one. Tell them they must cancel first.
+           - TECHNICAL SUPPORT RULE: If the customer describes a problem (e.g., "headlight not working", "battery issue"), you MUST answer their question using your knowledge base. DO NOT suggest booking a service slot unless they explicitly ask to book an appointment.
            - NEVER say "I have booked it" or "I have cancelled it" without the appropriate tag. If you say it, you MUST include the tag.
         7. If they want to buy, answer and mark as [HOT_LEAD].
         8. TAG PLACEMENT: Always place tags like [BOOK_SERVICE:...], [CANCEL_SERVICE], [HOT_LEAD], or [SHIFT_TO:...] at the VERY END of your response.
@@ -813,10 +821,17 @@ class MultilingualVoiceAgent:
             
             # 1. ALWAYS ask for language preference at the start
             self.log("Playing initial language selection menu...")
-            # We use English for the initial menu
-            self.say("Welcome to Ather Energy. For English, press 1. \u0c95\u0ca8\u0ccd\u0ca8\u0ca1\u0c95\u0ccd\u0c95\u0cbe\u0c97\u0cbf 2 \u0c92\u0ca4\u0ccd\u0ca4\u0cbf\u0cb0\u0cbf. \u0939\u093f\u0902\u0926\u0940 \u0915\u0947 \u0932\u093f\u090f 3 \u0926\u092c\u093e\u090f\u0902.", "en-IN")
+            # We use English for the initial menu, and capture any DTMF interrupt
+            digit = self.say("Welcome to Ather Energy. For English, press 1. \u0c95\u0ca8\u0ccd\u0ca8\u0ca1\u0c95\u0ccd\u0c95\u0cbe\u0c97\u0cbf 2 \u0c92\u0ca4\u0ccd\u0ca4\u0cbf\u0cb0\u0cbf. \u0939\u093f\u0902\u0926\u0940 \u0915\u0947 \u0932\u093f\u090f 3 \u0926\u092c\u093e\u090f\u0902.", "en-IN")
             
-            digit = self.agi.wait_for_digit(8000)
+            # If digit wasn't pressed during the audio, wait for it
+            if not digit:
+                digit = self.agi.wait_for_digit(8000)
+                
+            # pyst returns ascii code for stream_file, but string for wait_for_digit. Ensure it's a string.
+            if isinstance(digit, int):
+                digit = chr(digit)
+
             self.log(f"Digit received: {digit}")
             if digit == '2':
                 self.language = "kn-IN"
