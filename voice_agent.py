@@ -113,6 +113,40 @@ class MultilingualVoiceAgent:
             return "\n".join(lines)
         except:
             return str(knowledge_json)
+            
+    def _switch_agent(self, name):
+        """Switch the active persona during a call based on staff.json."""
+        try:
+            with open("/home/satoru/Desktop/ather/staff.json", "r") as f:
+                staff = json.load(f)
+                for s in staff:
+                    if s["name"].lower() == name.lower():
+                        self.active_agent = s
+                        # Sync with active_agent.json for dashboard
+                        try:
+                            with open("/home/satoru/Desktop/ather/active_agent.json", "w") as f_act:
+                                json.dump(s, f_act, indent=4)
+                        except:
+                            pass
+                        self.log(f"Shifted to persona: {s['name']} ({s['voice_gender']})")
+                        return True
+        except Exception as e:
+            self.log(f"Failed to switch agent: {e}")
+        return False
+            
+    def _preprocess_numbers(self, text):
+        """Convert digits to English words to ensure they are spoken in English."""
+        import re
+        num_map = {
+            '0': 'zero', '1': 'one', '2': 'two', '3': 'three', '4': 'four',
+            '5': 'five', '6': 'six', '7': 'seven', '8': 'eight', '9': 'nine'
+        }
+        # Simple replacement for standalone digits and grouped numbers
+        def replace_num(match):
+            val = match.group(0)
+            return " ".join([num_map.get(d, d) for d in val])
+        
+        return re.sub(r'\d+', replace_num, text)
 
     def say(self, text, lang_code=None):
         """TTS using Sarvam AI."""
@@ -121,24 +155,42 @@ class MultilingualVoiceAgent:
             return
             
         lang_code = lang_code or self.language
+        
+        # Ensure numbers are spoken in English
+        text_for_tts = self._preprocess_numbers(text)
+        
         self.log(f"Responding in {lang_code}: {text}")
         self.conversation.append({"role": "agent", "content": text, "lang": lang_code})
         
         # Updated Speaker Mapping for bulbul:v3
         speaker_map = {
-            "Aura": "shreya",   # Female
-            "Kavi": "kabir",    # Male
-            "Zephyr": "amit",   # Male
+            "Male": "shubh",
             "Female": "shreya",
-            "Male": "shubh"     # Default/Generic Male
+            "shreya": "shreya",
+            "shubh": "shubh",
+            "kabir": "kabir",
+            "amit": "amit"
         }
         
-        agent_name = self.active_agent.get("name", "Aura")
+        # Determine best speaker
         gender = self.active_agent.get("voice_gender", "Female")
-        speaker = speaker_map.get(agent_name, speaker_map.get(gender, "priya"))
+        agent_name = self.active_agent.get("name", "Aura")
+        
+        # If name is in map, use it, otherwise use gender
+        speaker = speaker_map.get(agent_name, speaker_map.get(gender, "shreya"))
+        
+        # Handle specific name overrides for bulbul:v3
+        if agent_name == "Aura" and gender == "Male":
+            speaker = "shubh"
+        elif agent_name == "Aura" and gender == "Female":
+            speaker = "shreya"
+        elif agent_name == "Kavi":
+            speaker = "kabir"
+        elif agent_name == "Zephyr":
+            speaker = "amit"
         
         payload = {
-            "inputs": [text],
+            "inputs": [text_for_tts],
             "target_language_code": lang_code,
             "speaker": speaker,
             "speech_sample_rate": 8000,
@@ -235,15 +287,35 @@ class MultilingualVoiceAgent:
         except:
             pass
 
+        # Load Staff list for availability check (Name and Role)
+        staff_context = []
+        available_staff_names = []
+        try:
+            with open("/home/satoru/Desktop/ather/staff.json", "r") as f:
+                staff_data = json.load(f)
+                for s in staff_data:
+                    staff_context.append(f"{s['name']} ({s.get('role', 'Specialist')})")
+                    available_staff_names.append(s["name"])
+        except:
+            staff_context = ["Aura (Sales Specialist)", "Kavi (Product Specialist)", "Zephyr (Operations Manager)"]
+            available_staff_names = ["Aura", "Kavi", "Zephyr"]
+
         prompt = f"""
         You are a PROACTIVE MULTILINGUAL assistant for Ather Energy.
         Languages: English, Kannada, Hindi.
         
         RULES:
-        1. NEVER say 'we will call you back'. Handle everything NOW.
-        2. If they want service, BOOK it immediately using [BOOK_SERVICE: YYYY-MM-DD HH:MM].
-        3. If they want to buy, answer and mark as [HOT_LEAD].
-        4. Solve the problem in this call regardless of the language.
+        1. Respond STRICTLY in {self.language}.
+        2. NUMBERS: Always write prices, model numbers, and counts in English digits (e.g., 450, 2024).
+        3. If they want to talk to a manager or human, explain that you are the digital assistant and can handle most queries.
+        4. PERSONA SHIFT: If they ask for a specific person OR a role (e.g. manager, technical expert), check the AVAILABLE STAFF: {', '.join(staff_context)}. 
+           - If a matching person or role is in the list: Say "Certainly, connecting you to our {{{{role}}}} [Name] now..." and include [SHIFT_TO: Name]. 
+           - If NOT in the list: Politely state they are currently out of office or unavailable.
+        5. If they want service, BOOK it immediately using [BOOK_SERVICE: YYYY-MM-DD HH:MM].
+        6. If they want to buy, answer and mark as [HOT_LEAD].
+        7. Solve the problem in this call regardless of the language.
+        8. If the customer provides their name, include it in your response as [UPDATE_NAME: CustomerName].
+        9. If the customer asks for a manager or expert, use [SHIFT_TO: Name] to switch to that persona (Available: Aura, Kavi, Zephyr).
 
         CURRENT IDENTITY:
         Agent Name: {self.active_agent['name']}
@@ -266,11 +338,11 @@ class MultilingualVoiceAgent:
         1. NEVER say 'we will call you back'. Handle everything NOW.
         2. If they want to buy, answer questions and mark as [HOT_LEAD].
         3. If they want service, check availability and BOOK it immediately using [BOOK_SERVICE: YYYY-MM-DD HH:MM].
-        4. If the intent shifts, use [SWITCH_AGENT: Name].
+        4. If the intent shifts, use [SHIFT_TO: Name].
         5. Stay concise, crisp, and professional.
         
         INTERNAL TAGS (APPEND IF NEEDED):
-        [SWITCH_AGENT: Name], [HOT_LEAD], [SERVICE_QUERY], [BOOK_SERVICE: YYYY-MM-DD HH:MM], [UPDATE_NAME: <name>], [FEEDBACK: <text>]
+        [SHIFT_TO: Name], [HOT_LEAD], [SERVICE_QUERY], [BOOK_SERVICE: YYYY-MM-DD HH:MM], [UPDATE_NAME: <name>], [FEEDBACK: <text>]
         """
         
         self.log("LLM Thinking (Groq)...")
@@ -399,6 +471,15 @@ class MultilingualVoiceAgent:
                             pass
                         content = content.strip()
 
+                    if "[SHIFT_TO:" in content:
+                        try:
+                            target_name = content.split("[SHIFT_TO:")[1].split("]")[0].strip()
+                            if self._switch_agent(target_name):
+                                content = content.split("[SHIFT_TO:")[0] + content.split("]")[1]
+                        except:
+                            pass
+                        content = content.strip()
+                        
                     if "[UPDATE_NAME:" in content:
                         # Extract name: [UPDATE_NAME: John]
                         try:
@@ -497,58 +578,134 @@ class MultilingualVoiceAgent:
                     break # End call on error or hangup
         except Exception as e:
             self.log(f"CRITICAL ERROR in Run: {str(e)}")
+    def _save_call_log(self):
+        """Save the conversation log in real-time to the calls directory."""
+        try:
+            log_dir = "/home/satoru/Desktop/ather/calls"
+            if not os.path.exists(log_dir):
+                os.makedirs(log_dir, exist_ok=True)
+            
+            log_file = f"{log_dir}/call_{self.caller_id}.json"
+            
+            all_calls = []
+            if os.path.exists(log_file):
+                try:
+                    with open(log_file, "r") as f:
+                        all_calls = json.load(f)
+                except:
+                    all_calls = []
+            
+            # Find if this unique call is already in the list
+            found_idx = -1
+            for i, c in enumerate(all_calls):
+                if c.get("unique_id") == self.unique_id:
+                    found_idx = i
+                    break
+            
+            human_summary = retail_agent_utils.summarize_conversation(self.conversation)
+            
+            new_call_data = {
+                "unique_id": self.unique_id,
+                "phone": self.caller_id,
+                "customer_name": self.user_profile.get("name", "Unknown"),
+                "timestamp": datetime.now().isoformat(),
+                "language": self.language,
+                "summary": human_summary,
+                "conversation": self.conversation,
+                "active_agent": self.active_agent.get("name", "Aura")
+            }
+            
+            if found_idx >= 0:
+                all_calls[found_idx] = new_call_data
+            else:
+                all_calls.insert(0, new_call_data)
+            
+            with open(log_file, "w") as f:
+                json.dump(all_calls, f, indent=4)
+            return True
+        except Exception as e:
+            self.log(f"Real-time save failed: {e}")
+            return False
+
+    def run(self):
+        try:
+            self.agi.answer()
+            time.sleep(0.5)
+            
+            # 1. ALWAYS ask for language preference at the start
+            self.log("Playing initial language selection menu...")
+            # We use English for the initial menu
+            self.say("Welcome to Ather Energy. For English, press 1. \u0c95\u0ca8\u0ccd\u0ca8\u0ca1\u0c95\u0ccd\u0c95\u0cbe\u0c97\u0cbf 2 \u0c92\u0ca4\u0ccd\u0ca4\u0cbf\u0cb0\u0cbf. \u0939\u093f\u0902\u0926\u0940 \u0915\u0947 \u0932\u093f\u090f 3 \u0926\u092c\u093e\u090f\u0902.", "en-IN")
+            
+            digit = self.agi.wait_for_digit(8000)
+            self.log(f"Digit received: {digit}")
+            if digit == '2':
+                self.language = "kn-IN"
+            elif digit == '3':
+                self.language = "hi-IN"
+            else:
+                self.language = "en-IN" # Default to English
+            
+            self.user_profile["language"] = self.language
+            self.log(f"Language selected: {self.language}")
+
+            # 2. Personalized Greeting based on selection
+            customer_name = self.user_profile.get("name", "Unknown")
+            agent_name = self.active_agent.get("name", "Aura")
+            
+            if customer_name != "Unknown":
+                if self.language == "kn-IN":
+                    self.say(f"ನಮಸ್ಕಾರ {customer_name} ಅವರೇ, ನಾನು {agent_name}. ನಿಮಗೆ ಹೇಗೆ ಸಹಾಯ ಮಾಡಬಲ್ಲೆ?")
+                elif self.language == "hi-IN":
+                    self.say(f"नमस्ते {customer_name} जी, मैं {agent_name} हूँ। मैं आपकी क्या मदद कर सकता हूँ?")
+                else:
+                    self.say(f"Hello {customer_name}! I am {agent_name}. How can I assist you with your Ather scooter today?")
+            else:
+                # Ask for name if unknown
+                if self.language == "kn-IN":
+                    self.say(f"ನಮ್ಮ ಅಥರ್ ಎನರ್ಜಿಗೆ ಸ್ವಾಗತ. ನಾನು {agent_name}, ನಿಮ್ಮ ಹೆಸರೇನು?")
+                elif self.language == "hi-IN":
+                    self.say(f"एथर एनर्जी में आपका स्वागत है। मैं {agent_name} हूँ, आपका नाम क्या है?")
+                else:
+                    self.say(f"Welcome to Ather Energy. I am {agent_name}. May I know your name please?")
+            
+            # Real-time save after greeting
+            self._save_call_log()
+
+            # 3. Main Conversation Loop
+            while True:
+                user_text = self.listen_and_transcribe()
+                
+                if user_text is not None:
+                    if user_text.strip():
+                        llm_reply = self.get_llm_response(user_text)
+                        self.say(llm_reply)
+                        # Real-time save after each turn
+                        self._save_call_log()
+                    else:
+                        continue
+                else:
+                    break
+        except Exception as e:
+            self.log(f"CRITICAL ERROR in Run: {str(e)}")
         finally:
-            # Save conversation to JSON
+            self.log("Finalizing call log and updating profile history...")
+            self._save_call_log()
             try:
-                unique_id = self.agi.get_variable("UNIQUEID") or datetime.now().strftime("%Y%m%d_%H%M%S")
-                log_dir = "/home/satoru/Desktop/ather/calls"
-                
-                # Ensure directory exists
-                if not os.path.exists(log_dir):
-                    os.makedirs(log_dir, exist_ok=True)
-                
-                log_file = f"{log_dir}/call_{self.caller_id}.json"
-                
-                # Load existing calls for this user
-                all_calls = []
-                if os.path.exists(log_file):
-                    try:
-                        with open(log_file, "r") as f:
-                            all_calls = json.load(f)
-                            if not isinstance(all_calls, list):
-                                all_calls = [all_calls]
-                    except:
-                        all_calls = []
-                
-                # Create human language summary
+                # Update user profile history once at the end
                 human_summary = retail_agent_utils.summarize_conversation(self.conversation)
-                
-                new_call_data = {
-                    "unique_id": unique_id,
-                    "phone": self.caller_id,
-                    "customer_name": self.user_profile.get("name", "Unknown"),
-                    "timestamp": datetime.now().isoformat(),
-                    "language": self.language,
-                    "summary": human_summary,
-                    "conversation": self.conversation
-                }
-                
-                all_calls.insert(0, new_call_data) # Newest first
-                
-                with open(log_file, "w") as f:
-                    json.dump(all_calls, f, indent=4)
-                
-                # Update user profile history
                 if "history" not in self.user_profile or not isinstance(self.user_profile["history"], list):
                     self.user_profile["history"] = []
                 self.user_profile["history"].append(f"Call on {datetime.now().strftime('%Y-%m-%d')}: {human_summary[:100]}...")
                 retail_agent_utils.save_user_profile(self.user_profile)
-                    
-                self.log(f"Conversation saved and user profile updated.")
-            except Exception as json_e:
-                self.log(f"Failed to save JSON: {str(json_e)}")
+                self.log("User profile history updated.")
+            except Exception as e:
+                self.log(f"Error finalizing profile history: {e}")
                 
-            self.agi.hangup()
+            try:
+                self.agi.hangup()
+            except:
+                pass
 
 if __name__ == "__main__":
     agent = MultilingualVoiceAgent()

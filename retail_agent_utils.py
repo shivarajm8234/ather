@@ -34,9 +34,18 @@ def add_lead(name, phone, source="Voice Call", notes="", priority="Medium", stat
             break
             
     if existing_lead:
+        # Update name if it was unknown
+        if existing_lead.get('customer_name') == "Unknown" and name != "Unknown":
+            existing_lead['customer_name'] = name
+            
         existing_lead['status'] = status
-        existing_lead['notes'] = notes
         existing_lead['priority'] = priority
+        
+        # Append new notes with timestamp instead of overwriting
+        old_notes = existing_lead.get('notes', '')
+        new_entry = f"\n[{datetime.now().strftime('%Y-%m-%d %H:%M')}] {notes}"
+        existing_lead['notes'] = old_notes + new_entry
+        
         existing_lead['timestamp'] = datetime.now().isoformat()
         save_data(LEADS_FILE, leads)
         return existing_lead
@@ -92,11 +101,27 @@ def get_user_profile(phone):
     clean_phone = "".join(filter(str.isdigit, str(phone)))[-10:]
     profile_path = f"/home/satoru/Desktop/ather/users/user_{clean_phone}.json"
     
+    # 1. Check if profile exists in users/
     if os.path.exists(profile_path):
         with open(profile_path, 'r') as f:
             return json.load(f)
     
-    new_profile = {"phone": clean_phone, "name": "Unknown", "history": [], "preferences": {}, "language": "en-IN"}
+    # 2. Secondary check: look for this phone in leads.json to recover name
+    leads = load_data(LEADS_FILE)
+    recovered_name = "Unknown"
+    for lead in leads:
+        lead_phone = "".join(filter(str.isdigit, str(lead.get('phone', ''))))[-10:]
+        if lead_phone == clean_phone and lead.get('customer_name') != "Unknown":
+            recovered_name = lead.get('customer_name')
+            break
+            
+    new_profile = {
+        "phone": clean_phone, 
+        "name": recovered_name, 
+        "history": [], 
+        "preferences": {}, 
+        "language": "en-IN"
+    }
     save_user_profile(new_profile)
     return new_profile
 

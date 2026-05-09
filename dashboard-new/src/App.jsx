@@ -497,7 +497,7 @@ const App = () => {
                 <div className="flex items-center gap-4">
                   <div className="relative">
                      <div className="w-10 h-10 bg-primary rounded-full flex items-center justify-center text-white animate-pulse">
-                        <Phone size={18} />
+                        <PhoneCall size={18} />
                      </div>
                      <div className="absolute -top-1 -right-1 w-4 h-4 bg-red-500 rounded-full border-2 border-[#0B0C10] flex items-center justify-center text-[0.5rem] font-bold">
                         LIVE
