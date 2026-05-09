@@ -11,6 +11,7 @@ from asterisk.agi import AGI
 import retail_agent_utils
 import logging
 import urllib3
+import re
 
 # Suppress SSL warnings for verify=False
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -135,18 +136,8 @@ class MultilingualVoiceAgent:
         return False
             
     def _preprocess_numbers(self, text):
-        """Convert digits to English words to ensure they are spoken in English."""
-        import re
-        num_map = {
-            '0': 'zero', '1': 'one', '2': 'two', '3': 'three', '4': 'four',
-            '5': 'five', '6': 'six', '7': 'seven', '8': 'eight', '9': 'nine'
-        }
-        # Simple replacement for standalone digits and grouped numbers
-        def replace_num(match):
-            val = match.group(0)
-            return " ".join([num_map.get(d, d) for d in val])
-        
-        return re.sub(r'\d+', replace_num, text)
+        """No longer preprocessing numbers here to allow native TTS engine to handle them correctly in Kannada/Hindi."""
+        return text
 
     def say(self, text, lang_code=None):
         """TTS using Sarvam AI."""
@@ -156,11 +147,51 @@ class MultilingualVoiceAgent:
             
         lang_code = lang_code or self.language
         
+        # Strip internal tags like [...] and (...) from speech
+        # Using more aggressive regex to handle unclosed tags
+        text_for_tts = re.sub(r'\[[^\]]*\]?', '', text)
+        text_for_tts = re.sub(r'\([^)]*\)?', '', text_for_tts)
+        
         # Ensure numbers are spoken in English
-        text_for_tts = self._preprocess_numbers(text)
+        text_for_tts = self._preprocess_numbers(text_for_tts)
         
         self.log(f"Responding in {lang_code}: {text}")
         self.conversation.append({"role": "agent", "content": text, "lang": lang_code})
+
+        # Split long text to avoid Sarvam 500-char limit
+        sentences = re.split(r'([.!?।])', text_for_tts)
+        chunks = []
+        current_chunk = ""
+        
+        # Process sentence and punctuation pairs
+        for i in range(0, len(sentences) - 1, 2):
+            s = sentences[i] + sentences[i+1]
+            if len(current_chunk) + len(s) < 450:
+                current_chunk += s
+            else:
+                if current_chunk: chunks.append(current_chunk)
+                current_chunk = s
+                
+        # Handle the last piece if there was no trailing punctuation
+        if len(sentences) % 2 != 0 and sentences[-1]:
+            if len(current_chunk) + len(sentences[-1]) < 450:
+                current_chunk += sentences[-1]
+            else:
+                if current_chunk: chunks.append(current_chunk)
+                current_chunk = sentences[-1]
+
+        if current_chunk: chunks.append(current_chunk)
+        if not chunks and text_for_tts: chunks = [text_for_tts]
+
+        for chunk in chunks:
+            self._say_chunk(chunk, lang_code)
+
+    def _say_chunk(self, text_for_tts, lang_code):
+        if not text_for_tts.strip(): return
+        
+        # Determine best speaker
+        gender = self.active_agent.get("voice_gender", "Female")
+        agent_name = self.active_agent.get("name", "Aura")
         
         # Updated Speaker Mapping for bulbul:v3
         speaker_map = {
@@ -171,10 +202,6 @@ class MultilingualVoiceAgent:
             "kabir": "kabir",
             "amit": "amit"
         }
-        
-        # Determine best speaker
-        gender = self.active_agent.get("voice_gender", "Female")
-        agent_name = self.active_agent.get("name", "Aura")
         
         # If name is in map, use it, otherwise use gender
         speaker = speaker_map.get(agent_name, speaker_map.get(gender, "shreya"))
@@ -201,7 +228,7 @@ class MultilingualVoiceAgent:
 
         try:
             # Added verify=False to bypass SSL issues in restricted environments
-            response = requests.post(SARVAM_TTS_URL, json=payload, headers=headers, verify=False)
+            response = requests.post(SARVAM_TTS_URL, json=payload, headers=headers, verify=False, timeout=20)
             if response.status_code == 200:
                 resp_json = response.json()
                 logging.debug(f"TTS Response: {resp_json.keys()}")
@@ -217,6 +244,8 @@ class MultilingualVoiceAgent:
                 self.log(f"TTS Error {response.status_code}: {response.text}")
         except Exception as e:
             self.log(f"TTS Exception: {str(e)}")
+            # Don't crash the script if TTS fails
+            pass
         finally:
             # Ensure we never hang up here
             pass
@@ -245,7 +274,7 @@ class MultilingualVoiceAgent:
                 headers = {"api-subscription-key": SARVAM_API_KEY}
                 
                 # Added verify=False
-                response = requests.post(SARVAM_STT_URL, files=files, data=data, headers=headers, verify=False)
+                response = requests.post(SARVAM_STT_URL, files=files, data=data, headers=headers, verify=False, timeout=10)
                 logging.debug(f"STT Response Status: {response.status_code}")
                 if response.status_code == 200:
                     resp_json = response.json()
@@ -274,6 +303,22 @@ class MultilingualVoiceAgent:
             last_chats = self.user_profile["history"][-2:] # Get last 2 summaries
             history_context = "PREVIOUS CONVERSATIONS:\n" + "\n".join(last_chats)
 
+        # Load Personal Service Records for Status Queries
+        personal_service_context = "No specific service record found."
+        try:
+            with open("/home/satoru/Desktop/ather/service_records.json", "r") as f:
+                all_services = json.load(f)
+                user_services = [s for s in all_services if str(s.get("phone")) == str(self.caller_id)]
+                if user_services:
+                    # Sort by date and take last 3
+                    user_services.sort(key=lambda x: str(x.get('appointment_date', '0000-00-00')), reverse=True)
+                    details = []
+                    for s in user_services[:3]:
+                        details.append(f"- {s.get('service_type')} | Status: {s.get('status')} | Date: {s.get('appointment_date', 'TBD')} at {s.get('appointment_time', 'TBD')}")
+                    personal_service_context = "USER SERVICE STATUS (RECENT):\n" + "\n".join(details)
+        except:
+            pass
+
         # Extract offers from knowledge graph if available
         offers_text = "Check current availability."
         try:
@@ -300,22 +345,49 @@ class MultilingualVoiceAgent:
             staff_context = ["Aura (Sales Specialist)", "Kavi (Product Specialist)", "Zephyr (Operations Manager)"]
             available_staff_names = ["Aura", "Kavi", "Zephyr"]
 
+        # Load Service Availability (Busy Slots)
+        busy_slots = []
+        try:
+            with open("/home/satoru/Desktop/ather/service_availability.json", "r") as f:
+                busy_data = json.load(f)
+                busy_slots = [f"{b['date']} at {b['time']}" for b in busy_data]
+        except:
+            pass
+
+        # Map language codes to names for better LLM adherence
+        lang_name_map = {"en-IN": "English", "kn-IN": "Kannada", "hi-IN": "Hindi"}
+        prompt_language = lang_name_map.get(self.language, "English")
+
         prompt = f"""
         You are a PROACTIVE MULTILINGUAL assistant for Ather Energy.
         Languages: English, Kannada, Hindi.
         
+        CONTEXT FOR THIS SPECIFIC CUSTOMER:
+        {history_context}
+        {personal_service_context}
+        
         RULES:
-        1. Respond STRICTLY in {self.language}.
-        2. NUMBERS: Always write prices, model numbers, and counts in English digits (e.g., 450, 2024).
-        3. If they want to talk to a manager or human, explain that you are the digital assistant and can handle most queries.
-        4. PERSONA SHIFT: If they ask for a specific person OR a role (e.g. manager, technical expert), check the AVAILABLE STAFF: {', '.join(staff_context)}. 
-           - If a matching person or role is in the list: Say "Certainly, connecting you to our {{{{role}}}} [Name] now..." and include [SHIFT_TO: Name]. 
-           - If NOT in the list: Politely state they are currently out of office or unavailable.
-        5. If they want service, BOOK it immediately using [BOOK_SERVICE: YYYY-MM-DD HH:MM].
-        6. If they want to buy, answer and mark as [HOT_LEAD].
-        7. Solve the problem in this call regardless of the language.
-        8. If the customer provides their name, include it in your response as [UPDATE_NAME: CustomerName].
-        9. If the customer asks for a manager or expert, use [SHIFT_TO: Name] to switch to that persona (Available: Aura, Kavi, Zephyr).
+        1. LANGUAGE LOCK: You MUST respond STRICTLY in {prompt_language}. Do not use any other language!
+        2. NO REPETITIVE GREETINGS: You have already greeted the customer. Do NOT say "Namaste", "Hello", or "Namasakra" again in your response. Get straight to the point.
+        3. NUMBERS & DATES: When speaking to the customer, ALWAYS spell out dates and times naturally in {prompt_language} (e.g., 'ನಾಳೆ ಬೆಳಿಗ್ಗೆ 10 ಗಂಟೆಗೆ' or 'Tomorrow at 10 AM'). ONLY use the YYYY-MM-DD format INSIDE the [BOOK_SERVICE] tag.
+        4. SELECTIVE PERSONA SHIFT (STABLE): Only shift persona if the customer explicitly asks for a different person OR if the topic changes completely (e.g., from buying to a technical battery issue). 
+           - Avoid shifting if you can handle the query yourself.
+           - Technical/Battery deep-dives -> SHIFT_TO: Kavi
+           - Pricing/Offers/Escalations -> SHIFT_TO: Zephyr
+           - Software/HUD/Maps -> SHIFT_TO: Arya
+           - Accessories/Community -> SHIFT_TO: Isha
+        5. If they want to talk to a manager or human, explain that you are the digital assistant and can handle most queries, then use [SHIFT_TO: Zephyr] if they insist.
+        6. SERVICE BOOKING & SCHEDULING (STRICT LOGIC): 
+           - EXPLICIT CONFIRMATION REQUIRED: If the customer asks to book a slot OR cancel a slot, you MUST first ask for their explicit confirmation (e.g., "Shall I confirm this booking for 10 AM?" or "Are you sure you want to cancel?"). Do NOT use the tags yet.
+           - ONLY append the [BOOK_SERVICE: YYYY-MM-DD HH:MM] or [CANCEL_SERVICE] tag IF the customer has explicitly said "Yes", "Confirm", or clearly agreed in their PREVIOUS turn.
+           - If the customer asks "When is my schedule?" or checks their appointment, simply read them their 'USER SERVICE STATUS' from above. Do NOT attempt to create a new booking or suggest new times.
+           - Check the BUSY SLOTS: {', '.join(busy_slots) if busy_slots else 'None'}. Suggest available times if their requested time is busy.
+           - DOUBLE BOOKING PREVENTION: Check the 'USER SERVICE STATUS' above. If the customer ALREADY has a 'Scheduled' service appointment, you MUST REFUSE to book a new one. Politely inform them that they already have an appointment and must cancel it first.
+           - NEVER say "I have booked it" or "I have cancelled it" without the appropriate tag. If you say it, you MUST include the tag.
+        7. If they want to buy, answer and mark as [HOT_LEAD].
+        8. TAG PLACEMENT: Always place tags like [BOOK_SERVICE:...], [CANCEL_SERVICE], [HOT_LEAD], or [SHIFT_TO:...] at the VERY END of your response.
+        9. NATURAL & CRISP SPEECH (CRITICAL): Speak naturally but be EXTREMELY BRIEF. Keep your responses to 1 or 2 short sentences maximum. Long responses cause audio delays. Do NOT be overly conversational. Get straight to the point.
+        10. If the customer provides their name, include it in your response as [UPDATE_NAME: CustomerName].
 
         CURRENT IDENTITY:
         Agent Name: {self.active_agent['name']}
@@ -368,13 +440,21 @@ class MultilingualVoiceAgent:
         3. Solve everything in this call.
         """
         
+        # Build messages including history
+        messages = [{"role": "system", "content": prompt}]
+        
+        # Add past context (last 10 turns for tokens)
+        for turn in self.conversation[-10:]:
+            role = "assistant" if turn["role"] == "agent" else "user"
+            messages.append({"role": role, "content": turn["content"]})
+            
+        # Add current query
+        messages.append({"role": "user", "content": text})
+        
         payload = {
-            "model": "llama-3.3-70b-versatile",
-            "messages": [
-                {"role": "system", "content": system_instr},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.0
+            "model": "qwen/qwen3-32b",
+            "messages": messages,
+            "temperature": 0.3
         }
         headers = {
             "Authorization": f"Bearer {GROQ_API_KEY}",
@@ -383,16 +463,15 @@ class MultilingualVoiceAgent:
         
         try:
             # Added verify=False
-            response = requests.post(GROQ_URL, json=payload, headers=headers, verify=False)
+            response = requests.post(GROQ_URL, json=payload, headers=headers, verify=False, timeout=10)
             if response.status_code == 200:
                 self.log(f"LLM Latency: {time.time() - start_llm:.2f}s")
                 content = response.json()["choices"][0]["message"].get("content")
-                if not content:
-                    self.log("Groq returned empty. Falling back...")
-                    return "I am listening. How can I help you?"
-                
-                self.log(f"AI Response: {content[:50]}...")
                 if content:
+                    # Strip <think> tags for Qwen reasoning models
+                    content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+                    
+                    self.conversation.append({"role": "agent", "content": content, "lang": self.language})
                     # 1. Passive Interest Detection (Safety Net for Dashboard Updates)
                     lower_text = text.lower()
                     if any(word in lower_text for word in ["buy", "price", "booking", "interested", "cost", "showroom", "test ride"]):
@@ -404,9 +483,10 @@ class MultilingualVoiceAgent:
                             content += f" [FEEDBACK: Customer opinion: {text[:60]}]"
 
                     # 2. Logic to log leads based on tags
-                    if "[SWITCH_AGENT:" in content:
+                    if "[SWITCH_AGENT:" in content or "[SHIFT_TO:" in content:
                         try:
-                            agent_name = content.split("[SWITCH_AGENT:")[1].split("]")[0].strip()
+                            tag = "[SWITCH_AGENT:" if "[SWITCH_AGENT:" in content else "[SHIFT_TO:"
+                            agent_name = content.split(tag)[1].split("]")[0].strip()
                             for staff in self.staff_list:
                                 if staff['name'].lower() == agent_name.lower():
                                     transition_msg = self._get_transition_msg(staff['name'], staff.get('role', 'Specialist'))
@@ -417,9 +497,9 @@ class MultilingualVoiceAgent:
                                     with open("/home/satoru/Desktop/ather/active_agent.json", "w") as f:
                                         json.dump(staff, f, indent=4)
                                     break
-                            content = content.replace(f"[SWITCH_AGENT: {agent_name}]", "").replace(f"[SWITCH_AGENT:{agent_name}]", "").strip()
-                        except:
-                            pass
+                            content = content.replace(f"{tag}{agent_name}]", "").strip()
+                        except Exception as e:
+                            self.log(f"Persona shift failed: {e}")
 
                     if "[HOT_LEAD]" in content:
                         # Determine stage based on context
@@ -469,6 +549,13 @@ class MultilingualVoiceAgent:
                                 content = content.split("[BOOK_SERVICE:")[0] + " (Slot Full, try another time) " + content.split("]")[1]
                         except:
                             pass
+
+                    if "[CANCEL_SERVICE]" in content:
+                        try:
+                            success, msg = retail_agent_utils.cancel_service_slot(self.caller_id)
+                            content = content.replace("[CANCEL_SERVICE]", "").strip()
+                        except:
+                            pass
                         content = content.strip()
 
                     if "[SHIFT_TO:" in content:
@@ -481,23 +568,37 @@ class MultilingualVoiceAgent:
                         content = content.strip()
                         
                     if "[UPDATE_NAME:" in content:
-                        # Extract name: [UPDATE_NAME: John]
                         try:
                             new_name = content.split("[UPDATE_NAME:")[1].split("]")[0].strip()
                             self.user_profile["name"] = new_name
-                            content = content.split("[UPDATE_NAME:")[0] + content.split("]")[1]
                         except:
                             pass
-                        content = content.strip()
 
                     if "[FEEDBACK:" in content:
                         try:
                             fb_text = content.split("[FEEDBACK:")[1].split("]")[0].strip()
-                            retail_agent_utils.save_feedback(self.user_profile.get("name", "Unknown"), self.caller_id, fb_text)
-                            content = content.split("[FEEDBACK:")[0] + content.split("]")[1]
+                            # Deep AI Analysis for Feedback
+                            analysis = self.analyze_feedback_with_ai(fb_text)
+                            retail_agent_utils.save_feedback(
+                                self.user_profile.get("name", "Unknown"), 
+                                self.caller_id, 
+                                fb_text,
+                                sentiment=analysis.get("sentiment", "Neutral"),
+                                rating=analysis.get("rating", 3),
+                                summary=analysis.get("summary", ""),
+                                churn_risk=analysis.get("churn_risk", "Low"),
+                                purchase_probability=analysis.get("purchase_probability", "Medium"),
+                                tone=analysis.get("tone", "Neutral"),
+                                recommendation=analysis.get("recommendation", "Follow up")
+                            )
                         except:
                             pass
-                        content = content.strip()
+                    
+                    # Final clean of all tags before returning to say()
+                    content = re.sub(r'\[[^\]]*\]?', '', content).strip()
+                    content = re.sub(r'\([^)]*\)?', '', content).strip()
+                    
+                    return content
 
                     if "[SERVICE_QUERY]" in content:
                         content = content.replace("[SERVICE_QUERY]", "").strip()
@@ -517,6 +618,79 @@ class MultilingualVoiceAgent:
             "en-IN": "I'm sorry, I couldn't process that right now. Could you please repeat?"
         }
         return fallbacks.get(self.language, fallbacks["en-IN"])
+
+    def analyze_feedback_with_ai(self, text):
+        """Analyze feedback text for sentiment, rating, and churn risk using Groq."""
+        try:
+            prompt = f"""
+            Analyze the following customer feedback for an Ather Energy showroom:
+            "{text}"
+            
+            Return ONLY a valid JSON object with these keys:
+            - sentiment: "Positive", "Neutral", or "Negative"
+            - rating: integer 1 to 5
+            - summary: one-line professional summary of the core issue/praise
+            - churn_risk: "Low", "Moderate", or "Critical"
+            - purchase_probability: "High", "Medium", or "Low" (likelihood to buy)
+            - tone: One or two words describing their emotion (e.g., "Frustrated", "Excited", "Hesitant")
+            - recommendation: Actionable advice for the sales/service team to improve this user's experience
+            
+            Strictly JSON only.
+            """
+            
+            headers = {
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            payload = {
+                "model": "llama-3.1-8b-instant", # Use faster model for analysis
+                "messages": [{"role": "user", "content": prompt}],
+                "temperature": 0.0,
+                "response_format": {"type": "json_object"}
+            }
+            
+            response = requests.post(GROQ_URL, json=payload, headers=headers, timeout=5)
+            if response.status_code == 200:
+                return json.loads(response.json()["choices"][0]["message"]["content"])
+        except:
+            pass
+        return {"sentiment": "Neutral", "rating": 3, "summary": text[:60], "churn_risk": "Low"}
+
+    def generate_llm_summary(self):
+        """Generate a professional one-line summary using Groq at the end of the call."""
+        if not self.conversation:
+            return "No interaction recorded."
+            
+        dialogue = ""
+        for msg in self.conversation:
+            role = "Agent" if msg["role"] == "agent" else "Customer"
+            dialogue += f"{role}: {msg['content']}\n"
+            
+        prompt = f"Summarize this customer interaction in exactly one professional line (no dialogue): \n\n{dialogue}"
+        
+        payload = {
+            "model": "llama-3.1-8b-instant",
+            "messages": [
+                {"role": "system", "content": "You are a professional showroom manager. Summarize the following call in one short line."},
+                {"role": "user", "content": prompt}
+            ],
+            "temperature": 0.1,
+            "max_tokens": 100
+        }
+        
+        try:
+            headers = {
+                "Authorization": f"Bearer {GROQ_API_KEY}",
+                "Content-Type": "application/json"
+            }
+            response = requests.post(GROQ_URL, json=payload, headers=headers, timeout=5)
+            if response.ok:
+                summary = response.json()['choices'][0]['message']['content'].strip()
+                return summary.replace('"', '')
+        except:
+            pass
+            
+        return retail_agent_utils.summarize_conversation(self.conversation)
 
     def run(self):
         try:
@@ -578,8 +752,8 @@ class MultilingualVoiceAgent:
                     break # End call on error or hangup
         except Exception as e:
             self.log(f"CRITICAL ERROR in Run: {str(e)}")
-    def _save_call_log(self):
-        """Save the conversation log in real-time to the calls directory."""
+    def _save_call_log(self, is_final=False):
+        """Save the conversation log in real-time. Use LLM summary only at the end."""
         try:
             log_dir = "/home/satoru/Desktop/ather/calls"
             if not os.path.exists(log_dir):
@@ -601,8 +775,13 @@ class MultilingualVoiceAgent:
                 if c.get("unique_id") == self.unique_id:
                     found_idx = i
                     break
-            
-            human_summary = retail_agent_utils.summarize_conversation(self.conversation)
+
+            # Use LLM summary ONLY if it's the final save of the call
+            if is_final:
+                human_summary = self.generate_llm_summary()
+            else:
+                # Fast local summary for real-time dashboard updates
+                human_summary = retail_agent_utils.summarize_conversation(self.conversation)
             
             new_call_data = {
                 "unique_id": self.unique_id,
@@ -678,6 +857,7 @@ class MultilingualVoiceAgent:
                 
                 if user_text is not None:
                     if user_text.strip():
+                        self.conversation.append({"role": "user", "content": user_text})
                         llm_reply = self.get_llm_response(user_text)
                         self.say(llm_reply)
                         # Real-time save after each turn
@@ -690,7 +870,7 @@ class MultilingualVoiceAgent:
             self.log(f"CRITICAL ERROR in Run: {str(e)}")
         finally:
             self.log("Finalizing call log and updating profile history...")
-            self._save_call_log()
+            self._save_call_log(is_final=True)
             try:
                 # Update user profile history once at the end
                 human_summary = retail_agent_utils.summarize_conversation(self.conversation)

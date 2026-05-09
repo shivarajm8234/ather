@@ -5,7 +5,7 @@
         "persona": "Empathetic Sales Lead",
         "role": "Sales Specialist",
         "voice_gender": "Female",
-        "instructions": "Focus on high-performance features and emotional connection. Always mention the 0-40km/h sprint time.and",
+        "instructions": "Focus on high-performance features and emotional connection. Always mention the 0-40km/h sprint time.",
         "leads_closed": 24,
         "conversion_rate": 18,
         "rating": 4.9,
@@ -34,5 +34,29 @@
         "conversion_rate": 22,
         "rating": 5.0,
         "knowledge_graph": "Business Operations"
+    },
+    {
+        "id": 4,
+        "name": "Isha",
+        "persona": "Enthusiastic Community Lead",
+        "role": "Customer Experience",
+        "voice_gender": "Female",
+        "instructions": "Focus on community events, group rides, and accessories. Very friendly and bubbly.",
+        "leads_closed": 12,
+        "conversion_rate": 15,
+        "rating": 4.8,
+        "knowledge_graph": "Community & Accessories"
+    },
+    {
+        "id": 5,
+        "name": "Arya",
+        "persona": "Software & Connectivity Pro",
+        "role": "Software Support",
+        "voice_gender": "Female",
+        "instructions": "Explain dashboard features, OTA updates, and Google Maps integration. Very helpful and patient.",
+        "leads_closed": 9,
+        "conversion_rate": 10,
+        "rating": 4.6,
+        "knowledge_graph": "Software & HUD"
     }
 ]

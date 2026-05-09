@@ -133,6 +133,22 @@ class DashboardServer(http.server.SimpleHTTPRequestHandler):
             else:
                 self.send_response(404)
                 self.end_headers()
+        elif self.path == '/api/service/delete':
+            data = json.loads(post_data)
+            service_file = os.path.join(BASE_DIR, 'service_records.json')
+            if os.path.exists(service_file):
+                with open(service_file, 'r') as f:
+                    service_list = json.load(f)
+                service_list = [s for s in service_list if str(s.get('id')) != str(data.get('id'))]
+                with open(service_file, 'w') as f:
+                    json.dump(service_list, f, indent=4)
+                self.send_response(200)
+                self.send_header('Content-Type', 'application/json')
+                self.end_headers()
+                self.wfile.write(json.dumps({"status": "success"}).encode())
+            else:
+                self.send_response(404)
+                self.end_headers()
         else:
             self.send_response(404)
             self.end_headers()

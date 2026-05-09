@@ -5,9 +5,9 @@
         "phone": "2000",
         "source": "Voice Call",
         "priority": "Hot",
-        "status": "New Enquiry",
-        "timestamp": "2026-05-09T12:42:04.680894",
-        "notes": "ಅದೇ ನಿಮ್ಮ ಶೋರೂಮಲ್ಲಿ ಯಾವ ಥರದ ಗಾಡಿಗಳಿವೆ"
+        "status": "Contacted",
+        "timestamp": "2026-05-09T15:33:57.866214",
+        "notes": "ಅದೇ ನಿಮ್ಮ ಶೋರೂಮಲ್ಲಿ ಯಾವ ಥರದ ಗಾಡಿಗಳಿವೆ\n[2026-05-09 14:31] ಅಲ್ಲ ನಾನು ಗಾಡಿ ಬುಕ್ ಮಾಡಬೇಕಾಗಿತ್ತು. ಒಂದು ಲಕ್ಷ ರುಪೀಸ್ ನನಗೆ ಬಂತು. ಯಾವ ಗಾಡಿ ನಿಮಗೆ ಅಂತ ಕೇಳಿ.\n[2026-05-09 15:30] Like a purchase, I want to buy a scooty under ₹1 lakh. I mean, that should be anything because you have a\n[2026-05-09 15:33] Hello everyone, it's your friend Bhagyashree here and I'm here to talk about the new initiative that has been launched in the Indian government called the Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra Maharashtra"
     },
     {
         "id": "f4ad0f5e",
@@ -18,37 +18,6 @@
         "status": "New Enquiry",
         "timestamp": "2026-05-08T19:53:23.445222",
         "notes": "You know what kind of vehicles are available right now?"
-    },
-    {
-        "id": "L101",
-        "customer_name": "Siddharth Malhotra",
-        "phone": "+91 9845012345",
-        "source": "Voice AI",
-        "priority": "Hot",
-        "status": "New Enquiry",
-        "timestamp": "2026-05-08T10:15:00Z",
-        "notes": "Inquired about 450X 30% discount. Interested in Space Grey."
-    },
-    {
-        "id": "L102",
-        "customer_name": "Ananya Iyer",
-        "phone": "+91 8050098765",
-        "source": "Website",
-        "priority": "Medium",
-        "status": "Test Ride",
-        "timestamp": "2026-05-08T09:30:00Z",
-        "notes": "Booked test ride for Ather Rizta."
-    },
-    {
-        "id": "L103",
-        "unique_id": "sync_call_1.json",
-        "customer_name": "Siddharth Malhotra",
-        "phone": "+91 9845012345",
-        "source": "AI Interaction Sync",
-        "priority": "Hot",
-        "status": "Test Ride",
-        "timestamp": "2026-05-08T10:15:00Z",
-        "notes": "Customer asked about the 450X 30% discount offer. He is interested in the Space Grey color and wants a test ride scheduled for tomorrow."
     },
     {
         "id": "L104",
@@ -71,16 +40,5 @@
         "status": "New Enquiry",
         "timestamp": "2026-05-08T19:19:49.055492",
         "notes": "Agent: Welcome. For English press 1. ಕನ್ನಡಕ್ಕಾಗಿ 2 ಒತ್ತಿರಿ. हिंदी के लिए 3 दबाएं.\nAgent: ಧನ್ಯವಾದಗಳು. ನಿಮ್ಮ ಹೆಸರೇನು?\nCustomer: ನನ್ನ ಹೆಸರು ನಿಮ್ಮ ಗೊತ್ತಿಲ್ವಾ\nAgent: ನನ್ನ ಬಳಿ ನಿಮ್ಮ ಹೆಸರು ಮಾಹಿತಿ ಇಲ್ಲ. ದಯವಿಟ್ಟು ನಿಮ್ಮ ಹೆಸರು ತಿಳಿಸಿ.\nCustomer: ನನ್ನ ಹೆಸರು ಶಿವರಾಜ್ ಅಂತ\nAgent: ನಮಸ್ತೆ ಶಿವರಾಜ್, ಏಥರ್-ಗೆ ಸುಸ್ವಾಗತ. ನಾ"
-    },
-    {
-        "id": "L106",
-        "unique_id": "sync_call_2.json",
-        "customer_name": "Ananya Iyer",
-        "phone": "+91 8050098765",
-        "source": "AI Interaction Sync",
-        "priority": "Hot",
-        "status": "Booking",
-        "timestamp": "2026-05-08T09:30:00Z",
-        "notes": "Customer expressed interest in the Ather Rizta. She inquired about the storage capacity and the family-friendly features. Test ride booked."
     }
 ]

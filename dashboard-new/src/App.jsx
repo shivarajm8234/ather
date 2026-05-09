@@ -4,8 +4,10 @@ import {
   UserCog, MessageSquare, BarChart3, Settings, LogOut, 
   Search, Bell, HelpCircle, ChevronDown, Clock, Sparkles,
   AlertCircle, Brain, Network, Smile, TrendingUp, MoreHorizontal,
-  ShieldCheck, Fingerprint, Key, Lock, X, ArrowRight, BrainCircuit, ChevronRight, Plus
+  ShieldCheck, Fingerprint, Key, Lock, X, ArrowRight, BrainCircuit, ChevronRight, Plus,
+  Calendar, Trash2
 } from 'lucide-react';
+const CalendarIcon = Calendar;
 import { 
   AreaChart, Area, XAxis, YAxis, CartesianGrid, Tooltip, 
   ResponsiveContainer, PieChart, Pie, Cell,
@@ -14,6 +16,7 @@ import {
 import { motion, AnimatePresence } from 'framer-motion';
 
 const LeadDetailModal = ({ lead, isOpen, onClose, calls }) => {
+  const [expandedCallId, setExpandedCallId] = useState(null);
   if (!isOpen || !lead) return null;
   const leadCalls = (calls || []).filter(c => c.phone === lead.phone || c.customer_name === lead.customer_name);
 
@@ -83,31 +86,54 @@ const LeadDetailModal = ({ lead, isOpen, onClose, calls }) => {
             </div>
 
             <div className="col-span-12 lg:col-span-8 glass-card p-8">
-              <h3 className="text-lg font-bold mb-8 font-outfit">Interaction Timeline</h3>
-              <div className="space-y-8 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-white/5">
-                 {leadCalls.map((call, idx) => (
-                   <div key={idx} className="relative pl-10">
-                     <div className="absolute left-0 top-1.5 w-6 h-6 bg-surface-sidebar border-2 border-primary rounded-full flex items-center justify-center">
-                       <div className="w-1.5 h-1.5 bg-primary rounded-full"></div>
-                     </div>
-                     <div className="flex justify-between items-start mb-2">
-                       <div className="font-bold text-sm text-primary">Autonomous Voice Interaction</div>
-                       <span className="text-[0.65rem] text-slate-500 font-bold uppercase">{new Date(call.timestamp).toLocaleString()}</span>
-                     </div>
-                     <div className="bg-white/2 border border-white/5 rounded-[1.5rem] p-6">
-                       <div className="flex items-center gap-3 mb-4">
-                          <div className={`p-2 rounded-lg ${call.summary.toLowerCase().includes('interested') ? 'bg-emerald-500/10 text-emerald-500' : 'bg-blue-500/10 text-blue-500'}`}>
-                            <Smile size={16} />
+               <div className="space-y-8 relative before:absolute before:left-[11px] before:top-2 before:bottom-2 before:w-[2px] before:bg-white/5">
+                  {leadCalls.map((call, idx) => {
+                    const isExpanded = expandedCallId === (call.unique_id || idx);
+                    return (
+                      <div key={idx} className="relative pl-10">
+                        <div className="absolute left-0 top-1.5 w-6 h-6 bg-surface-sidebar border-2 border-primary rounded-full flex items-center justify-center">
+                          <div className="w-1.5 h-1.5 bg-primary rounded-full"></div>
+                        </div>
+                        <div className="flex justify-between items-start mb-2">
+                          <div className="font-bold text-sm text-primary">Autonomous Voice Interaction</div>
+                          <span className="text-[0.65rem] text-slate-500 font-bold uppercase">{new Date(call.timestamp).toLocaleString()}</span>
+                        </div>
+                        <div className="bg-white/2 border border-white/5 rounded-[1.5rem] p-6">
+                          <div className="flex items-center justify-between mb-4">
+                             <div className="flex items-center gap-3">
+                                <div className={`p-2 rounded-lg ${call.summary.toLowerCase().includes('interested') ? 'bg-emerald-500/10 text-emerald-500' : 'bg-blue-500/10 text-blue-500'}`}>
+                                  <Smile size={16} />
+                                </div>
+                                <span className="text-xs font-bold uppercase tracking-wider">{call.summary.toLowerCase().includes('interested') ? 'Positive Momentum' : 'Neutral Inquiry'}</span>
+                             </div>
+                             <button 
+                               onClick={() => setExpandedCallId(isExpanded ? null : (call.unique_id || idx))}
+                               className="text-[0.65rem] font-bold text-primary hover:underline uppercase tracking-widest"
+                             >
+                                {isExpanded ? 'Hide Details' : 'View Full Conversation'}
+                             </button>
                           </div>
-                          <span className="text-xs font-bold uppercase tracking-wider">{call.summary.toLowerCase().includes('interested') ? 'Positive Momentum' : 'Neutral Inquiry'}</span>
-                       </div>
-                       <p className="text-sm text-slate-300 leading-relaxed mb-6">{call.summary}</p>
-                       <div className="bg-surface-main/50 rounded-xl p-4 border border-white/5">
-                          <p className="text-[0.7rem] text-slate-500 italic">"I'm actually quite impressed with the Ather 450X's Warp mode. Can you tell me more about the charging infrastructure near Indiranagar?"</p>
-                       </div>
-                     </div>
-                   </div>
-                 ))}
+                          
+                          <p className={`text-sm text-slate-300 leading-relaxed ${isExpanded ? 'mb-6' : 'line-clamp-1'}`}>
+                             {call.summary.includes('Agent:') && !isExpanded ? 'Autonomous Voice Interaction Log' : call.summary}
+                          </p>
+
+                          {(isExpanded && (call.conversation || call.dialogue)) && (
+                            <div className="mt-6 space-y-4 pt-6 border-t border-white/5">
+                               {(call.conversation || call.dialogue).map((msg, mIdx) => (
+                                 <div key={mIdx} className={`flex ${msg.role === 'agent' ? 'justify-start' : 'justify-end'}`}>
+                                    <div className={`max-w-[80%] p-4 rounded-2xl text-xs leading-relaxed ${msg.role === 'agent' ? 'bg-white/5 text-slate-300 rounded-tl-none' : 'bg-primary text-white rounded-tr-none shadow-lg'}`}>
+                                       <div className="font-bold uppercase text-[0.5rem] mb-1 opacity-50">{msg.role}</div>
+                                       {msg.content}
+                                    </div>
+                                 </div>
+                               ))}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    );
+                  })}
                  {leadCalls.length === 0 && (
                    <div className="text-center py-20 text-slate-600 text-sm italic">Deep interaction history currently unavailable for this profile.</div>
                  )}
@@ -188,6 +214,7 @@ const App = () => {
   const [selectedService, setSelectedService] = useState(null);
   const [isServiceModalOpen, setIsServiceModalOpen] = useState(false);
   const [leadFilter, setLeadFilter] = useState('all');
+  const [selectedDate, setSelectedDate] = useState(new Date().toISOString().split('T')[0]);
 
   const [data, setData] = useState({ leads: [], service: [], calls: [], knowledge: null, staff: [], feedback: [] });
   const [time, setTime] = useState(new Date().toLocaleTimeString());
@@ -607,6 +634,7 @@ const App = () => {
               {renderView(
                 currentView, 
                 { ...data, leads: filteredLeads }, 
+                setCurrentView,
                 handleLeadClick, 
                 selectedLead, 
                 leadFilter, 
@@ -622,8 +650,9 @@ const App = () => {
                 handleUpdateStaff,
                 searchTerm,
                 setSearchTerm,
-                setSelectedService,
-                setIsServiceModalOpen
+                setIsServiceModalOpen,
+                selectedDate,
+                setSelectedDate
               )}
             </motion.div>
           </AnimatePresence>
@@ -787,6 +816,7 @@ const App = () => {
 const renderView = (
   view, 
   data, 
+  setCurrentView,
   onLeadClick, 
   selectedLead, 
   leadFilter, 
@@ -803,13 +833,31 @@ const renderView = (
   searchTerm,
   setSearchTerm,
   setSelectedService,
-  setIsServiceModalOpen
+  setIsServiceModalOpen,
+  selectedDate,
+  setSelectedDate
 ) => {
   const { leads, service, calls, knowledge, staff, feedback } = data;
   
+  // Deduplication logic: Keep only the latest entry for each Name + Phone pair
+  const deduplicate = (list, key1, key2) => {
+    const seen = new Set();
+    return (list || []).filter(item => {
+      const val1 = item[key1] || item['customer_name'] || item['customer'];
+      const val2 = item[key2] || item['phone'];
+      const id = `${val1}-${val2}`.toLowerCase();
+      if (seen.has(id)) return false;
+      seen.add(id);
+      return true;
+    });
+  };
+
+  const uniqueLeads = deduplicate(leads, 'customer_name', 'phone');
+  const uniqueFeedback = deduplicate(feedback, 'customer_name', 'phone');
+
   const stats = {
-    totalLeads: leads?.length || 0,
-    hotLeads: leads?.filter(l => l.priority === 'Hot').length || 0,
+    totalLeads: uniqueLeads.length,
+    hotLeads: uniqueLeads.filter(l => l.priority === 'Hot').length,
     serviceDue: service?.filter(s => s.status === 'Due Soon' || s.status === 'Overdue').length || 0,
     aiCalls: calls?.length || 0
   };
@@ -821,17 +869,17 @@ const renderView = (
 
   const modelData = ['450X', '450S', 'Rizta', 'Apex'].map(model => ({
     name: model,
-    value: leads.filter(l => l.notes?.toLowerCase().includes(model.toLowerCase())).length || 1
-  }));
+    value: leads.filter(l => (l.notes || "").toLowerCase().includes(model.toLowerCase())).length || 0
+  })).filter(m => m.value > 0);
 
-  const sentimentData = ['M', 'T', 'W', 'T', 'F', 'S', 'S'].map((day, idx) => {
-    const daySentiment = (calls || []).filter(c => new Date(c.timestamp).getDay() === (idx + 1) % 7).length;
-    return { name: day, score: daySentiment * 20 || 0 };
+  const sentimentData = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map((day, idx) => {
+    const daySentiment = (calls || []).filter(c => new Date(c.timestamp).getDay() === idx).length;
+    return { name: day, score: daySentiment || 0 };
   });
 
   const monthlyReportData = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'].map((month, idx) => ({
     name: month,
-    vol: idx <= new Date().getMonth() ? (leads.length * (idx + 1)) / 2 : 0
+    vol: (leads || []).filter(l => new Date(l.timestamp).getMonth() === idx).length
   }));
 
   switch(view) {
@@ -898,28 +946,27 @@ const renderView = (
                 </ResponsiveContainer>
               </div>
             </div>
-            <div className="col-span-12 lg:col-span-4 glass-card p-8">
-              <h3 className="text-lg font-bold mb-8">Model Interest Split</h3>
-              <div className="h-[300px] min-h-[300px] w-full" style={{ minHeight: '300px' }}>
-                <ResponsiveContainer width="100%" height="100%" minHeight={300} minWidth={0}>
+            <div className="col-span-12 lg:col-span-4 glass-card p-10 min-h-[400px]">
+              <h3 className="text-xl font-bold mb-8 font-outfit">Model Interest Heatmap</h3>
+              <div style={{ width: '100%', height: 300 }}>
+                <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
                       data={modelData}
-                      innerRadius={80}
-                      outerRadius={100}
+                      innerRadius={60}
+                      outerRadius={80}
                       paddingAngle={5}
                       dataKey="value"
                     >
-                      <Cell fill="#20b2aa" />
-                      <Cell fill="#10b981" />
-                      <Cell fill="#3b82f6" />
-                      <Cell fill="#f43f5e" />
+                      {modelData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={['var(--primary)', '#f43f5e', '#fbbf24', '#22c55e'][index % 4]} />
+                      ))}
                     </Pie>
                     <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '12px', fontSize: '12px' }} />
                   </PieChart>
                 </ResponsiveContainer>
               </div>
-            </div>
+           </div>
           </div>
         </div>
       );
@@ -971,7 +1018,7 @@ const renderView = (
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-white/5">
-                  {(filteredLeads || []).map(lead => (
+                  {(leadFilter === 'hot' ? uniqueLeads.filter(l => l.priority === 'Hot') : uniqueLeads).map(lead => (
                     <tr key={lead.id} className="hover:bg-white/2 transition-colors cursor-pointer group" onClick={() => onLeadClick(lead)}>
                       <td className="px-8 py-5">
                         <div className="font-bold group-hover:text-primary transition-colors">{lead.customer_name}</div>
@@ -1035,7 +1082,7 @@ const renderView = (
           </header>
           <div className="flex gap-6 overflow-x-auto pb-10 no-scrollbar">
             {stages.map(stage => {
-              const stageLeads = leads.filter(l => l.status === stage || (stage === 'New Enquiry' && l.status === 'New Enquiry'));
+              const stageLeads = uniqueLeads.filter(l => l.status === stage || (stage === 'New Enquiry' && l.status === 'New Enquiry'));
               return (
                 <div key={stage} className="min-w-[320px] max-w-[320px] flex flex-col gap-4">
                   <div className="flex justify-between items-center px-2">
@@ -1168,7 +1215,7 @@ const renderView = (
                 </thead>
                 <tbody className="divide-y divide-white/5">
                   {calls.map((call, idx) => (
-                    <tr key={call.id} className="hover:bg-white/2 transition-colors">
+                    <tr key={call.id || idx} className="hover:bg-white/2 transition-colors cursor-pointer" onClick={() => onLeadClick({ customer_name: call.customer_name || 'Unknown', phone: call.phone, priority: 'Medium', source: 'Voice', timestamp: call.timestamp, notes: call.summary })}>
                       <td className="px-8 py-5">
                          <div className="font-bold text-sm">{call.customer_name || 'Unknown'}</div>
                          <div className="text-[0.65rem] text-slate-500 mt-1">{new Date(call.timestamp).toLocaleString()}</div>
@@ -1176,9 +1223,9 @@ const renderView = (
                       <td className="px-8 py-5">
                          <div className="flex items-center gap-2">
                             <div className="w-6 h-6 rounded-full bg-gradient-to-br from-primary to-accent flex items-center justify-center text-[0.6rem] font-bold">
-                               {idx % 2 === 0 ? 'AU' : 'KA'}
+                               {call.active_agent?.substring(0,2).toUpperCase() || 'AI'}
                             </div>
-                            <span className="text-xs font-bold">{idx % 2 === 0 ? 'Aura' : 'Kavi'}</span>
+                            <span className="text-xs font-bold">{call.active_agent || 'Aura'}</span>
                          </div>
                       </td>
                       <td className="px-8 py-5">
@@ -1231,11 +1278,9 @@ const renderView = (
 
           <div className="glass-card overflow-hidden">
             <div className="p-8 border-b border-white/5 flex justify-between items-center bg-white/2">
-               <h3 className="text-lg font-bold">Service Appointment Calendar</h3>
-               <div className="flex gap-2">
-                  <button className="p-2 hover:bg-white/5 rounded-lg transition-colors"><ChevronDown className="rotate-90" size={18} /></button>
-                  <span className="text-sm font-bold px-4 flex items-center">May 2026</span>
-                  <button className="p-2 hover:bg-white/5 rounded-lg transition-colors"><ChevronDown className="-rotate-90" size={18} /></button>
+               <h3 className="text-lg font-bold">All Service Appointments</h3>
+               <div className="flex gap-4 items-center">
+                  <span className="text-sm font-bold text-primary">Chronological Order</span>
                </div>
             </div>
             <table className="w-full text-left">
@@ -1249,17 +1294,21 @@ const renderView = (
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {(service || []).map(s => (
+                {[...(service || [])].sort((a, b) => {
+                   const tA = new Date(`${a.appointment_date || '1970-01-01'} ${a.appointment_time || '00:00'}`).getTime();
+                   const tB = new Date(`${b.appointment_date || '1970-01-01'} ${b.appointment_time || '00:00'}`).getTime();
+                   return (isNaN(tA) ? 0 : tA) - (isNaN(tB) ? 0 : tB);
+                }).map(s => (
                   <tr 
                     key={s.id} 
-                    className="hover:bg-white/2 transition-colors cursor-pointer"
+                    className="hover:bg-white/2 transition-colors cursor-pointer group"
                     onClick={() => {
                       setSelectedService(s);
                       setIsServiceModalOpen(true);
                     }}
                   >
                     <td className="px-8 py-5">
-                       <div className="font-bold text-sm">{s.customer_name}</div>
+                       <div className="font-bold text-sm group-hover:text-primary transition-colors">{s.customer_name}</div>
                        <div className="text-[0.65rem] text-slate-500 flex items-center gap-1 mt-1">
                           <Clock size={10} /> {s.appointment_date || s.last_contact} | {s.appointment_time || 'TBD'}
                        </div>
@@ -1268,23 +1317,33 @@ const renderView = (
                        <div className="text-sm font-medium">{s.vehicle_no}</div>
                        <div className="text-[0.65rem] text-slate-500 uppercase tracking-tighter">{s.current_km} KM recorded</div>
                     </td>
+                    <td className="px-8 py-5 text-sm font-bold text-primary">{s.station || 'Auto-Allotting...'}</td>
                     <td className="px-8 py-5">
-                       <div className={`text-xs font-bold ${s.station ? 'text-primary' : 'text-slate-500 italic'}`}>
-                          {s.station || 'Unassigned'}
-                       </div>
+                       <Badge type={s.service_type === 'Voice Booking' ? 'success' : 'default'}>{s.service_type}</Badge>
                     </td>
-                    <td className="px-8 py-5">
-                       <Badge type={s.service_type === 'Autonomous Allotment' ? 'success' : 'default'}>
-                          {s.service_type}
-                       </Badge>
-                    </td>
-                    <td className="px-8 py-5 text-right">
-                       <Badge type={s.status === 'Scheduled' ? 'success' : s.status === 'Due Soon' ? 'warm' : 'hot'}>
-                          {s.status}
-                       </Badge>
+                    <td className="px-8 py-5 text-right flex justify-end gap-3 items-center">
+                       <Badge type={s.status === 'Scheduled' ? 'success' : 'warm'}>{s.status}</Badge>
+                       <button 
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          if(confirm('Cancel this appointment?')) {
+                            fetch('/api/service/delete', { method: 'POST', body: JSON.stringify({ id: s.id }) }).then(() => window.location.reload());
+                          }
+                        }}
+                        className="p-2 hover:bg-rose-500/10 text-rose-500 rounded-lg transition-all opacity-0 group-hover:opacity-100"
+                       >
+                          <Trash2 size={16} />
+                       </button>
                     </td>
                   </tr>
                 ))}
+                {((service || []).length === 0) && (
+                  <tr>
+                    <td colSpan="5" className="px-8 py-20 text-center text-slate-500 italic text-sm">
+                       No appointments scheduled for this date.
+                    </td>
+                  </tr>
+                )}
               </tbody>
             </table>
           </div>
@@ -1465,8 +1524,8 @@ const renderView = (
       return (
         <div className="space-y-10">
           <header>
-            <h1 className="text-4xl font-bold font-outfit mb-2">Customer Feedback</h1>
-            <p className="text-slate-400">AI-powered sentiment analysis and churn prediction.</p>
+            <h1 className="text-4xl font-bold font-outfit mb-2">Customer</h1>
+            <p className="text-slate-400">Voice AI sentiment analysis and churn prediction.</p>
           </header>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
             <KPICard icon={Smile} label="Average Rating" value={(feedback.reduce((acc, f) => acc + f.rating, 0) / (feedback.length || 1)).toFixed(1)} colorClass="bg-primary/10 text-primary" />
@@ -1485,21 +1544,24 @@ const renderView = (
                 </tr>
               </thead>
               <tbody className="divide-y divide-white/5">
-                {(feedback || []).map(f => (
+                {uniqueFeedback.map(f => (
                   <tr 
                     key={f.id} 
                     className="hover:bg-white/2 transition-colors cursor-pointer group"
                     onClick={() => setSelectedFeedback(f)}
                   >
                     <td className="px-8 py-5">
-                       <div className="font-bold group-hover:text-primary transition-colors">{f.customer}</div>
+                       <div className="font-bold group-hover:text-primary transition-colors">{f.customer_name || f.customer}</div>
+                       <div className="text-[0.65rem] text-slate-500">{f.phone}</div>
                     </td>
-                    <td className="px-8 py-5 text-amber-500">{'⭐'.repeat(f.rating)}</td>
+                    <td className="px-8 py-5 text-amber-500">
+                      {'⭐'.repeat(f.sentiment === 'Positive' ? 5 : (f.sentiment === 'Negative' ? 1 : 3))}
+                    </td>
                     <td className="px-8 py-5">
-                       <Badge type={f.sentiment === 'Positive' ? 'success' : 'hot'}>{f.sentiment}</Badge>
+                       <Badge type={f.sentiment === 'Positive' ? 'success' : (f.sentiment === 'Negative' ? 'hot' : 'warm')}>{f.sentiment}</Badge>
                     </td>
-                    <td className="px-8 py-5 text-sm text-slate-400 truncate max-w-xs">{f.summary}</td>
-                    <td className="px-8 py-5 text-right text-xs font-bold text-slate-500">{f.status}</td>
+                    <td className="px-8 py-5 text-sm text-slate-400 truncate max-w-xs">{f.summary || f.comment}</td>
+                    <td className="px-8 py-5 text-right text-xs font-bold text-slate-500">{f.status || 'Verified'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1528,11 +1590,13 @@ const renderView = (
                   <header className="flex justify-between items-start mb-8 relative">
                      <div className="flex flex-col gap-1">
                         <Badge type={selectedFeedback.sentiment === 'Positive' ? 'success' : 'hot'}>AI PREDICTED: {selectedFeedback.sentiment.toUpperCase()}</Badge>
-                        <h2 className="text-3xl font-bold font-outfit mt-4 bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">{selectedFeedback.customer}</h2>
+                        <h2 className="text-3xl font-bold font-outfit mt-4 bg-gradient-to-r from-white to-slate-400 bg-clip-text text-transparent">{selectedFeedback.customer_name || selectedFeedback.customer}</h2>
+                        <div className="text-[0.65rem] text-slate-500 mb-2">{selectedFeedback.phone}</div>
                         <div className="flex gap-1.5 mt-2">
-                           {Array.from({ length: 5 }).map((_, i) => (
-                             <span key={i} className={`text-lg ${i < selectedFeedback.rating ? 'text-amber-400' : 'text-slate-700'}`}>⭐</span>
-                           ))}
+                           {Array.from({ length: 5 }).map((_, i) => {
+                             const score = selectedFeedback.sentiment === 'Positive' ? 5 : (selectedFeedback.sentiment === 'Negative' ? 1 : 3);
+                             return <span key={i} className={`text-lg ${i < score ? 'text-amber-400' : 'text-slate-700'}`}>⭐</span>;
+                           })}
                         </div>
                      </div>
                      <button 
@@ -1546,37 +1610,49 @@ const renderView = (
                   <div className="space-y-8 relative">
                      <div className="p-8 bg-gradient-to-br from-primary/10 to-transparent rounded-3xl border border-primary/20">
                         <div className="flex items-center gap-2 mb-4 text-[0.65rem] font-bold text-primary uppercase tracking-[0.2em]">
-                           <Sparkles size={14} /> Sentiment Analysis Engine
+                           <Sparkles size={14} /> Interaction Key-Points
+                        </div>
+                        <p className="text-slate-300 text-sm leading-relaxed mb-6 italic">
+                           "{selectedFeedback.summary || selectedFeedback.comment}"
+                        </p>
+                        <div className="grid grid-cols-2 gap-4">
+                           <div className="p-4 bg-white/5 rounded-2xl">
+                              <div className="text-[0.6rem] font-bold text-slate-500 uppercase mb-1">Source</div>
+                              <div className="text-xs font-bold text-white uppercase">{selectedFeedback.source || 'Voice AI'}</div>
+                           </div>
+                           <div className="p-4 bg-white/5 rounded-2xl">
+                              <div className="text-[0.6rem] font-bold text-slate-500 uppercase mb-1">Intelligence Date</div>
+                              <div className="text-xs font-bold text-white">{selectedFeedback.timestamp ? new Date(selectedFeedback.timestamp).toLocaleDateString() : 'Real-time'}</div>
+                           </div>
                         </div>
                         <div className="flex items-center gap-8 mb-6">
                            <div className="flex-1 h-3 bg-white/5 rounded-full overflow-hidden border border-white/5">
                               <motion.div 
                                 initial={{ width: 0 }}
-                                animate={{ width: selectedFeedback.sentiment === 'Positive' ? '94%' : '28%' }}
-                                className={`h-full ${selectedFeedback.sentiment === 'Positive' ? 'bg-emerald-500' : 'bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.5)]'}`} 
+                                animate={{ width: selectedFeedback.sentiment === 'Positive' ? '94%' : (selectedFeedback.sentiment === 'Neutral' ? '60%' : '28%') }}
+                                className={`h-full ${selectedFeedback.sentiment === 'Positive' ? 'bg-emerald-500' : (selectedFeedback.sentiment === 'Neutral' ? 'bg-amber-500' : 'bg-rose-500 shadow-[0_0_15px_rgba(244,63,94,0.5)]')}`} 
                               />
                            </div>
                            <span className="font-bold font-outfit text-3xl text-white">
-                              {selectedFeedback.sentiment === 'Positive' ? '94%' : '28%'}<span className="text-sm text-slate-500 font-normal ml-1">conf.</span>
+                              {selectedFeedback.sentiment === 'Positive' ? '94%' : (selectedFeedback.sentiment === 'Neutral' ? '60%' : '28%')}<span className="text-sm text-slate-500 font-normal ml-1">conf.</span>
                            </span>
                         </div>
                         <p className="text-sm text-slate-300 leading-relaxed italic border-l-2 border-primary/30 pl-4 py-1">
-                          "The AI detected deep-seated {selectedFeedback.sentiment === 'Positive' ? 'enthusiasm regarding product acceleration and UI fluidity' : 'critical frustration points concerning branch responsiveness'} across the 12-minute conversation segment."
+                          "The AI detected a primary emotional tone of <span className="font-bold text-primary">{selectedFeedback.tone || 'Neutral'}</span> across the conversation segment."
                         </p>
                      </div>
 
                      <div className="grid grid-cols-2 gap-6">
                         <div className="glass-card p-6 bg-white/2 border-white/5">
-                           <label className="text-[0.6rem] font-bold text-slate-500 uppercase mb-3 block tracking-widest">Interaction Key-Points</label>
-                           <p className="text-sm font-semibold text-slate-200 leading-relaxed">{selectedFeedback.summary}</p>
+                           <label className="text-[0.6rem] font-bold text-slate-500 uppercase mb-3 block tracking-widest">Purchase Probability</label>
+                           <div className="flex items-center gap-3">
+                              <div className={`w-3 h-3 rounded-full ${selectedFeedback.purchase_probability === 'High' ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : (selectedFeedback.purchase_probability === 'Medium' ? 'bg-amber-500' : 'bg-slate-500')}`}></div>
+                              <span className="text-xl font-bold text-slate-200">{selectedFeedback.purchase_probability || 'Medium'}</span>
+                           </div>
                         </div>
                         <div className="glass-card p-6 bg-white/2 border-white/5">
-                           <label className="text-[0.6rem] font-bold text-slate-500 uppercase mb-3 block tracking-widest">Agentic Response Strategy</label>
-                           <div className="flex items-center gap-2 text-primary font-bold text-sm">
-                              <div className="w-2 h-2 bg-primary rounded-full animate-ping"></div>
-                              {selectedFeedback.sentiment === 'Positive' ? 'Loyalty Reward Program' : 'Direct Service Intervention'}
-                           </div>
-                           <p className="text-[0.7rem] text-slate-500 mt-2 leading-relaxed">AI has prioritized this for {selectedFeedback.sentiment === 'Positive' ? 'cross-sell of premium accessories.' : 'immediate manager callback.'}</p>
+                           <label className="text-[0.6rem] font-bold text-slate-500 uppercase mb-3 block tracking-widest">AI Action Strategy</label>
+                           <p className="text-sm font-semibold text-primary leading-relaxed">{selectedFeedback.recommendation || 'Follow up with customer to resolve pending queries.'}</p>
                         </div>
                      </div>
 
@@ -1584,8 +1660,8 @@ const renderView = (
                         <div>
                            <h4 className="text-xs font-bold text-slate-500 uppercase tracking-widest mb-3">Predicted Churn Impact</h4>
                            <div className="flex items-center gap-3">
-                              <div className={`w-3 h-3 rounded-full ${selectedFeedback.sentiment === 'Positive' ? 'bg-emerald-500 shadow-[0_0_10px_rgba(16,185,129,0.5)]' : 'bg-rose-500 animate-pulse shadow-[0_0_10px_rgba(244,63,94,0.5)]'}`}></div>
-                              <span className="text-sm font-bold text-slate-200">{selectedFeedback.sentiment === 'Positive' ? 'Minimal Risk - Natural Brand Promoter' : 'CRITICAL - High Churn Probability'}</span>
+                              <div className={`w-3 h-3 rounded-full ${selectedFeedback.churn_risk === 'Critical' ? 'bg-rose-500 animate-pulse shadow-[0_0_10px_rgba(244,63,94,0.5)]' : (selectedFeedback.churn_risk === 'Low' ? 'bg-emerald-500' : 'bg-amber-500')}`}></div>
+                              <span className="text-sm font-bold text-slate-200 uppercase">{selectedFeedback.churn_risk || 'Low'} RISK</span>
                            </div>
                         </div>
                         <div className="text-right">
@@ -1613,22 +1689,35 @@ const renderView = (
             <p className="text-slate-400">Enterprise-wide analytics and regional branch comparisons.</p>
           </header>
           <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-             <KPICard icon={BarChart3} label="Active Leads" value={leads.length} trend="Live" colorClass="bg-emerald-500/10 text-emerald-500" />
+             <KPICard icon={BarChart3} label="Active Leads" value={uniqueLeads.length} trend="Live" colorClass="bg-emerald-500/10 text-emerald-500" />
              <KPICard icon={Users} label="Pending Services" value={service.length} trend="Live" colorClass="bg-blue-500/10 text-blue-500" />
              <KPICard icon={Wrench} label="System Health" value="100%" trend="Optimal" colorClass="bg-primary/10 text-primary" />
           </div>
-          <div className="glass-card p-8">
-             <h3 className="text-lg font-bold mb-8">Lead Volume Trend</h3>
-             <div className="h-[300px] min-h-[300px] w-full">
-                <ResponsiveContainer width="100%" height="100%" minHeight={300} minWidth={0}>
-                  <BarChart data={monthlyReportData}>
-                    <Bar dataKey="vol" fill="#20b2aa" radius={[10, 10, 0, 0]} />
-                    <XAxis dataKey="name" stroke="#475569" fontSize={10} tickLine={false} axisLine={false} />
-                    <Tooltip contentStyle={{ backgroundColor: '#0f172a', border: 'none', borderRadius: '12px' }} />
-                  </BarChart>
+          <div className="glass-card p-10 min-h-[400px]">
+              <div className="flex justify-between items-center mb-8">
+                 <h3 className="text-xl font-bold font-outfit">Lead Conversion Velocity</h3>
+                 <div className="flex gap-2">
+                    <Badge type="success">+12% Growth</Badge>
+                 </div>
+              </div>
+              <div style={{ width: '100%', height: 300 }}>
+                <ResponsiveContainer width="100%" height="100%">
+                  <AreaChart data={monthlyReportData}>
+                    <defs>
+                      <linearGradient id="colorVol" x1="0" y1="0" x2="0" y2="1">
+                        <stop offset="5%" stopColor="var(--primary)" stopOpacity={0.3}/>
+                        <stop offset="95%" stopColor="var(--primary)" stopOpacity={0}/>
+                      </linearGradient>
+                    </defs>
+                    <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="rgba(255,255,255,0.05)" />
+                    <XAxis dataKey="name" axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10}} />
+                    <YAxis axisLine={false} tickLine={false} tick={{fill: '#64748b', fontSize: 10}} />
+                    <Tooltip contentStyle={{backgroundColor: '#0f172a', border: 'none', borderRadius: '12px', fontSize: '12px'}} />
+                    <Area type="monotone" dataKey="vol" stroke="var(--primary)" strokeWidth={3} fillOpacity={1} fill="url(#colorVol)" />
+                  </AreaChart>
                 </ResponsiveContainer>
-             </div>
-          </div>
+              </div>
+           </div>
         </div>
       );
     case 'settings':

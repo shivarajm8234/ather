@@ -133,12 +133,27 @@ def save_user_profile(profile):
     save_data(profile_path, profile)
 
 def summarize_conversation(conversation):
-    """Convert a technical conversation log into a human-readable summary."""
-    summary_parts = []
-    for msg in conversation:
-        role = "Agent" if msg["role"] == "agent" else "Customer"
-        summary_parts.append(f"{role}: {msg['content']}")
-    return "\n".join(summary_parts)
+    """Generate a concise one-line summary based on detected intent."""
+    if not conversation:
+        return "Empty interaction."
+        
+    # Analyze conversation for intent markers
+    full_text = " ".join([msg["content"].lower() for msg in conversation])
+    
+    summary = "General inquiry about Ather products."
+    
+    if "book" in full_text or "service" in full_text:
+        summary = "Customer requested service appointment/info."
+    elif "buy" in full_text or "price" in full_text or "cost" in full_text:
+        summary = "Customer inquiring about purchasing/pricing."
+    elif "test ride" in full_text or "drive" in full_text:
+        summary = "Customer interested in scheduling a test ride."
+    elif "manager" in full_text or "staff" in full_text or "person" in full_text:
+        summary = "Customer requested to speak with a staff member."
+    elif "feedback" in full_text or "complain" in full_text:
+        summary = "Customer provided feedback or raised a concern."
+        
+    return summary
 
 def get_available_slots(date_str):
     """Check availability across 3 stations for a specific date."""
@@ -162,6 +177,12 @@ def book_service_slot(name, phone, date_str, time_str):
     if ":" not in clean_time:
         clean_time = f"{int(clean_time):02d}:00"
     
+    # Backend Guardrail: Check if user already has an active booking
+    records = load_data(SERVICE_FILE)
+    for r in records:
+        if r.get("phone") == phone and r.get("status") == "Scheduled":
+            return False, f"Customer already has an active booking on {r.get('appointment_date')} at {r.get('appointment_time')}"
+
     available = get_available_slots(date_str)
     
     # If the exact slot is missing, try to find the closest working hour
@@ -186,13 +207,21 @@ def book_service_slot(name, phone, date_str, time_str):
     
     # Update Service Records
     records = load_data(SERVICE_FILE)
+    
+    # Try to find existing vehicle_no for this customer
+    v_no = "KA-SYNC" # Default
+    for r in records:
+        if r.get("phone") == phone and r.get("vehicle_no"):
+            v_no = r["vehicle_no"]
+            break
+            
     new_service = {
         "id": f"S{str(uuid.uuid4())[:4].upper()}",
         "customer_name": name,
         "phone": phone,
-        "vehicle_no": "KA-MN-NEW",
+        "vehicle_no": v_no,
         "current_km": 0,
-        "service_type": "Autonomous Allotment",
+        "service_type": "Voice Booking",
         "status": "Scheduled",
         "appointment_date": date_str,
         "appointment_time": clean_time,
@@ -203,15 +232,51 @@ def book_service_slot(name, phone, date_str, time_str):
     
     return True, f"Booked at {station} for {clean_time}"
 
-def save_feedback(name, phone, feedback_text):
+def cancel_service_slot(phone):
+    """Cancel the most recent scheduled service for the given phone."""
+    records = load_data(SERVICE_FILE)
+    cancelled = False
+    target_date = None
+    target_time = None
+    
+    # Find the most recent 'Scheduled' service for this phone
+    for r in reversed(records):
+        if r.get("phone") == phone and r.get("status") == "Scheduled":
+            r["status"] = "Cancelled"
+            target_date = r.get("appointment_date")
+            target_time = r.get("appointment_time")
+            cancelled = True
+            break
+            
+    if cancelled:
+        save_data(SERVICE_FILE, records)
+        # Also free up the slot in availability
+        if target_date and target_time:
+            bookings = load_data(AVAILABILITY_FILE)
+            new_bookings = [b for b in bookings if not (b.get("date") == target_date and b.get("time") == target_time and b.get("customer") == r.get("customer_name"))]
+            save_data(AVAILABILITY_FILE, new_bookings)
+        return True, "Service cancelled successfully."
+    
+    return False, "No active service appointment found to cancel."
+
+
+def save_feedback(name, phone, feedback_text, sentiment="Neutral", rating=3, summary="", churn_risk="Low", purchase_probability="Medium", tone="Neutral", recommendation="Follow up"):
     feedback_file = "/home/satoru/Desktop/ather/feedback.json"
     data = load_data(feedback_file)
     new_fb = {
         "id": str(uuid.uuid4())[:8],
         "customer_name": name,
         "phone": phone,
-        "feedback": feedback_text,
-        "sentiment": "Positive" if "good" in feedback_text.lower() or "happy" in feedback_text.lower() else "Neutral",
+        "comment": feedback_text,
+        "summary": summary if summary else feedback_text[:100] + "...",
+        "sentiment": sentiment,
+        "rating": rating,
+        "churn_risk": churn_risk,
+        "purchase_probability": purchase_probability,
+        "tone": tone,
+        "recommendation": recommendation,
+        "status": "Verified",
+        "source": "Voice AI",
         "timestamp": datetime.now().isoformat()
     }
     data.insert(0, new_fb)

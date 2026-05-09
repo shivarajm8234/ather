@@ -1,4 +1,14 @@
 [
-    {"date": "2026-05-08", "time": "11:00", "station": "Station B"},
-    {"date": "2026-05-08", "time": "15:00", "station": "Station A"}
+    {
+        "date": "2026-05-10",
+        "time": "09:00",
+        "station": "Station A",
+        "customer": "Shivaraj"
+    },
+    {
+        "date": "2026-05-10",
+        "time": "11:00",
+        "station": "Station A",
+        "customer": "Shivaraj"
+    }
 ]
