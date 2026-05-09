@@ -1,44 +1,56 @@
-# 🏍️ Ather Voice Intelligence
+# 🏍️ Ather Intelligence Hub
 
-A multilingual AI-powered voice agent for Ather Energy, built on **Asterisk PBX** with **Sarvam AI** for Speech-to-Text, LLM, and Text-to-Speech — all in Indian languages.
+An enterprise-grade, multilingual AI ecosystem for Ather Energy. This suite combines a **Multilingual Voice Agent**, a **Proactive Service Outreach Engine**, and a **Real-time Management Dashboard** to automate sales, service, and customer feedback.
 
-![Architecture](https://img.shields.io/badge/Architecture-Asterisk%20%2B%20Sarvam%20AI-blueviolet?style=for-the-badge)
+![Architecture](https://img.shields.io/badge/Architecture-Asterisk%20%2B%20Sarvam%20AI%20%2B%20React-blueviolet?style=for-the-badge)
 ![Languages](https://img.shields.io/badge/Languages-English%20%7C%20Kannada%20%7C%20Hindi-green?style=for-the-badge)
-![Telegram](https://img.shields.io/badge/Knowledge%20Update-Telegram%20Bot-blue?style=for-the-badge)
+![Security](https://img.shields.io/badge/Security-2FA%20Admin%20Login-red?style=for-the-badge)
 
 ---
 
-## 🎯 What This Does
+## 🎯 Core Capabilities
 
-1. **Customer calls 3000** on a SIP phone
-2. **IVR Menu**: Press 1 (English), 2 (Kannada), 3 (Hindi)
-3. **AI listens** (Sarvam STT → `saarika:v2.5`)
-4. **AI thinks** using a **Knowledge Graph** + Sarvam LLM (`sarvam-105b`)
-5. **AI speaks** the answer back (Sarvam TTS → `bulbul:v3`)
-6. **Knowledge is updated live** via a Telegram bot
+### 1. Multilingual Voice AI (Inbound)
+*   **Customer Calls**: Dial **3000** on any SIP phone.
+*   **IVR Navigation**: Multilingual greeting with language selection (English, Kannada, Hindi).
+*   **Cognitive Reasoning**: Uses **Sarvam LLM** (`sarvam-105b`) integrated with a **Knowledge Graph** to answer complex queries about Ather products, pricing, and service.
+*   **Native Speech**: STT via `saarika:v2.5` and TTS via `bulbul:v3` for natural Indian language interactions.
+
+### 2. Proactive Service Outreach (Outbound)
+*   **Autonomous Follow-ups**: Automatically identifies customers due for service (5k/10k km intervals).
+*   **Dynamic Engagement**: Simulates/executes outreach calls to schedule appointments.
+*   **Lead Recovery**: Tracks "Not Reachable" or "Switched Off" status for automated retries.
+
+### 3. Enterprise Admin Dashboard
+*   **Real-time Monitoring**: Live tracking of call logs, customer leads, and service bookings.
+*   **Feedback Analytics**: Aggregates customer feedback for service quality improvements.
+*   **Staff Management**: Digital persona management for AI agents.
+*   **Security**: Professional 2FA authentication for administrative access.
 
 ---
 
 ## 🏗️ Architecture
 
 ```
-┌──────────────┐     ┌──────────────┐     ┌──────────────┐
-│  SIP Phone   │────▶│   Asterisk   │────▶│ voice_agent  │
-│  (PortSIP)   │◀────│   PBX        │◀────│   .py (AGI)  │
-└──────────────┘     └──────────────┘     └──────┬───────┘
-                                                  │
-                     ┌────────────────────────────┼────────────────┐
-                     │                            │                │
-              ┌──────▼──────┐  ┌─────────────▼──────┐  ┌──────▼──────┐
-              │ Sarvam STT  │  │   Sarvam LLM       │  │ Sarvam TTS  │
-              │ saarika:v2.5│  │   sarvam-105b       │  │ bulbul:v3   │
-              └─────────────┘  │ + knowledge_graph   │  └─────────────┘
-                               └─────────────────────┘
-                                          ▲
-                               ┌──────────┴──────────┐
-                               │   Telegram Bot       │
-                               │  (Live KG Updates)   │
-                               └──────────────────────┘
+┌──────────────┐     ┌──────────────┐     ┌──────────────────┐
+│  SIP Phone   │────▶│   Asterisk   │────▶│  voice_agent.py  │
+│  (Inbound)   │◀────│     PBX      │◀────│      (AGI)       │
+└──────────────┘     └──────────────┘     └────────┬─────────┘
+                                                   │
+┌──────────────┐     ┌──────────────┐     ┌────────▼─────────┐
+│  Customer    │◀────│ Proactive    │◀────│  Retail Utils    │
+│  (Outreach)  │     │ Agent        │     │  (Logic Layer)   │
+└──────────────┘     └──────────────┘     └────────┬─────────┘
+                                                   │
+┌──────────────┐     ┌──────────────┐     ┌────────▼─────────┐
+│  Telegram    │────▶│ Knowledge    │────▶│  knowledge_graph │
+│  Update Bot  │◀────│ Management   │◀────│      .json       │
+└──────────────┘     └──────────────┘     └────────┬─────────┘
+                                                   │
+┌──────────────┐     ┌──────────────┐     ┌────────▼─────────┐
+│  React/Vite  │────▶│  Flask/HTTP  │────▶│  Data Persistence│
+│  Dashboard   │◀────│  API Server  │◀────│ (Leads/Service)  │
+└──────────────┘     └──────────────┘     └──────────────────┘
 ```
 
 ---
@@ -47,118 +59,72 @@ A multilingual AI-powered voice agent for Ather Energy, built on **Asterisk PBX*
 
 ```
 ather/
-├── voice_agent.py          # Main AGI script (STT → LLM → TTS)
-├── telegram_bot.py         # Telegram bot for live knowledge updates
-├── knowledge_graph.json    # AI's brain — editable via Telegram
-├── start.sh                # One-command startup script
-├── extensions.conf         # Asterisk dialplan config
-├── pjsip.conf              # SIP endpoint config
-├── requirements.txt        # Python dependencies
-├── .env.example            # Template for API keys
-└── dashboard/
-    ├── index.html          # Web dashboard
-    ├── style.css           # Dashboard styles
-    └── script.js           # Dashboard logic
+├── voice_agent.py          # Main Inbound AGI script
+├── proactive_agent.py      # Outbound service outreach agent
+├── server.py               # Flask-based API backend & Dashboard host
+├── telegram_bot.py         # Knowledge update bot
+├── retail_agent_utils.py   # Business logic & data management
+├── knowledge_graph.json    # AI's dynamic brain
+├── dashboard-new/          # Modern React/Vite Admin UI
+├── dashboard/              # Legacy/Simple Admin UI
+├── leads.json              # CRM for sales leads
+├── service_records.json    # Maintenance & service database
+├── feedback.json           # Customer feedback storage
+├── .env                    # API Keys & Secrets
+└── start.sh                # Unified system startup script
 ```
 
 ---
 
-## 🚀 Quick Start
+## 🚀 Getting Started
 
 ### Prerequisites
-- Ubuntu/Debian Linux
-- Asterisk PBX installed (`sudo apt install asterisk`)
-- Python 3.10+
-- Sarvam AI API key ([sarvam.ai](https://sarvam.ai))
-- Telegram Bot Token (from [@BotFather](https://t.me/BotFather))
+- **OS**: Ubuntu/Debian
+- **System**: Asterisk PBX (`sudo apt install asterisk`)
+- **Python**: 3.10+
+- **API Keys**: Sarvam AI, Telegram Bot Token
 
-### Setup
+### Installation & Launch
 
 ```bash
-# 1. Clone the repo
+# 1. Clone & Enter
 git clone https://github.com/shivarajm8234/ather.git
 cd ather
 
-# 2. Install dependencies
-pip install -r requirements.txt
-
-# 3. Configure API keys
+# 2. Setup Environment
 cp .env.example .env
-# Edit .env and add your SARVAM_API_KEY and TELEGRAM_BOT_TOKEN
+# Add SARVAM_API_KEY and TELEGRAM_BOT_TOKEN to .env
 
-# 4. Start everything
+# 3. Unified Startup
 chmod +x start.sh
 ./start.sh
 ```
 
-### What `start.sh` does:
-- ✅ Deploys `voice_agent.py` to Asterisk AGI directory
-- ✅ Copies Asterisk configs (`extensions.conf`, `pjsip.conf`)
-- ✅ Starts the Telegram Knowledge Bot in background
-- ✅ Starts the Web Dashboard on port 8000
+### What `start.sh` handles:
+- ✅ **AGI Deployment**: Moves voice scripts to `/var/lib/asterisk/agi-bin/`.
+- ✅ **PBX Config**: Synchronizes `extensions.conf` and `pjsip.conf`.
+- ✅ **Service Agents**: Launches Telegram Bot and Proactive Outreach Agent.
+- ✅ **Admin Hub**: Starts the Flask API server and Dashboard on Port 8001.
 
 ---
 
-## 📞 Usage
+## 📞 Key Workflows
 
-### Voice Agent
-1. Register a SIP phone (e.g., PortSIP) to your Asterisk server
-2. Dial **3000**
-3. Choose your language (1/2/3)
-4. Ask about Ather products — the AI answers using the knowledge graph!
+### Dynamic Knowledge Updates
+Send natural language messages to the **Telegram Bot** (e.g., *"Ather 450S price is now 1.3L"*). The bot uses Sarvam LLM to parse and merge the new information into the `knowledge_graph.json` instantly.
 
-### Telegram Bot
-Send messages to your bot to update the AI's knowledge in real-time:
-- `"Ather 450X price is now 1.5 Lakhs"` → Updates price in knowledge graph
-- `/view` → See current knowledge graph
-- `/logs` → See last 5 messages
+### Proactive Scheduling
+The `proactive_agent.py` monitors `service_records.json`. If a vehicle is due for service, it initiates an outreach flow, tracking success or failure in the sales pipeline.
 
-### Dashboard
-Open `http://localhost:8000` to see the system status.
-
----
-
-## 🧠 Knowledge Graph
-
-The file `knowledge_graph.json` is the AI's brain. It contains structured data about:
-- **Business Info**: Name, location, timings
-- **Products**: Models, prices, range, colors, discounts
-- **FAQ**: Charging time, warranty
-
-Update it via:
-1. **Telegram Bot** — Send a message, AI merges it automatically
-2. **Manual Edit** — Edit the JSON file directly
-
----
-
-## 🌐 Supported Languages
-
-| Language | Code  | STT | LLM | TTS |
-|----------|-------|-----|-----|-----|
-| English  | en-IN | ✅  | ✅  | ✅  |
-| Kannada  | kn-IN | ✅  | ✅  | ✅  |
-| Hindi    | hi-IN | ✅  | ✅  | ✅  |
-
----
-
-## 🔧 API Stack
-
-| Component | Service | Model |
-|-----------|---------|-------|
-| Speech-to-Text | Sarvam AI | `saarika:v2.5` |
-| LLM (Brain) | Sarvam AI | `sarvam-105b` |
-| Text-to-Speech | Sarvam AI | `bulbul:v3` |
-| Knowledge Update | Sarvam AI | `sarvam-105b` |
+### Admin Dashboard
+Access `http://localhost:8001` for the full enterprise suite:
+- **Login**: `admin` / `ather123`
+- **2FA**: Default `123456` (or scan QR if configured via `setup_auth.py`).
 
 ---
 
 ## 📄 License
+MIT License.
 
-MIT License — feel free to use and modify.
-
----
-
-## 👤 Author
-
-**Shivaraj M**
-- GitHub: [@shivarajm8234](https://github.com/shivarajm8234)
+## 👤 Maintainer
+**Shivaraj M** - [@shivarajm8234](https://github.com/shivarajm8234)
