@@ -9,9 +9,21 @@ from datetime import datetime
 from dotenv import load_dotenv
 from asterisk.agi import AGI
 import retail_agent_utils
+import logging
+import urllib3
+
+# Suppress SSL warnings for verify=False
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
+# Setup file logging for debugging
+logging.basicConfig(
+    filename='/home/satoru/Desktop/ather/voice_agent.log',
+    level=logging.DEBUG,
+    format='%(asctime)s - %(levelname)s - %(message)s'
+)
 
 # Load environment variables from absolute path
-ENV_PATH = "/home/satoru/Desktop/ds/.env"
+ENV_PATH = "/home/satoru/Desktop/ather/.env"
 load_dotenv(ENV_PATH)
 
 SARVAM_API_KEY = os.getenv("SARVAM_API_KEY")
@@ -30,10 +42,13 @@ class MultilingualVoiceAgent:
     def __init__(self):
         self.agi = AGI()
         self.language = "en-IN"
-        self.recording_path = "/tmp/user_input"
         self.conversation = []
         raw_id = self.agi.get_variable("CALLERID(num)") or "Unknown"
+        self.unique_id = self.agi.get_variable("UNIQUEID") or str(time.time())
         self.caller_id = "".join(filter(str.isdigit, str(raw_id)))[-10:] if raw_id != "Unknown" else "Unknown"
+        self.recording_path = f"/tmp/user_input_{self.unique_id}"
+        self.resp_path = f"/tmp/resp_{self.unique_id}"
+        
         self.user_profile = retail_agent_utils.get_user_profile(self.caller_id)
         self.load_active_agent()
         self._cache_knowledge()
@@ -41,7 +56,7 @@ class MultilingualVoiceAgent:
     def _cache_knowledge(self):
         """Cache knowledge graph in memory for sub-second LLM processing."""
         try:
-            with open("/home/satoru/Desktop/ds/knowledge_graph.json", "r") as f:
+            with open("/home/satoru/Desktop/ather/knowledge_graph.json", "r") as f:
                 self.knowledge_base = f.read()
         except:
             self.knowledge_base = "No additional knowledge available."
@@ -49,11 +64,11 @@ class MultilingualVoiceAgent:
     def load_active_agent(self):
         """Load the active AI persona configuration."""
         try:
-            with open("/home/satoru/Desktop/ds/staff.json", "r") as f:
+            with open("/home/satoru/Desktop/ather/staff.json", "r") as f:
                 self.staff_list = json.load(f)
             
             # Check for a specific 'active_agent.json'
-            active_path = "/home/satoru/Desktop/ds/active_agent.json"
+            active_path = "/home/satoru/Desktop/ather/active_agent.json"
             if os.path.exists(active_path):
                 with open(active_path, "r") as f:
                     self.active_agent = json.load(f)
@@ -70,7 +85,8 @@ class MultilingualVoiceAgent:
             self.staff_list = [self.active_agent]
         
     def log(self, message):
-        """Styled logging for Asterisk console."""
+        """Styled logging for Asterisk console and file."""
+        logging.debug(f"[{self.caller_id}] {message}")
         self.agi.verbose(f" \033[1;34m[Agent]\033[0m {message}")
 
     def _format_knowledge(self, knowledge_json):
@@ -108,13 +124,13 @@ class MultilingualVoiceAgent:
         self.log(f"Responding in {lang_code}: {text}")
         self.conversation.append({"role": "agent", "content": text, "lang": lang_code})
         
-        # High-fidelity Speaker Mapping
+        # Updated Speaker Mapping for bulbul:v3
         speaker_map = {
-            "Aura": "priya",    # Empathetic Female
-            "Kavi": "mani",     # Analytical Male
-            "Zephyr": "kumar",  # Strategic Manager (Male)
-            "Female": "priya",  # Gender Fallback
-            "Male": "mani"      # Gender Fallback
+            "Aura": "shreya",   # Female
+            "Kavi": "kabir",    # Male
+            "Zephyr": "amit",   # Male
+            "Female": "shreya",
+            "Male": "shubh"     # Default/Generic Male
         }
         
         agent_name = self.active_agent.get("name", "Aura")
@@ -126,20 +142,27 @@ class MultilingualVoiceAgent:
             "target_language_code": lang_code,
             "speaker": speaker,
             "speech_sample_rate": 8000,
-            "enable_preprocessing": False, # Disabled for speed
-            "model": "bulbul:v2" # v2 is optimized for low-latency
+            "enable_preprocessing": False, 
+            "model": "bulbul:v3" 
         }
         headers = {"api-subscription-key": SARVAM_API_KEY, "Content-Type": "application/json"}
 
         try:
-            response = requests.post(SARVAM_TTS_URL, json=payload, headers=headers)
+            # Added verify=False to bypass SSL issues in restricted environments
+            response = requests.post(SARVAM_TTS_URL, json=payload, headers=headers, verify=False)
             if response.status_code == 200:
-                audio_content = response.json().get("audios", [])[0]
-                with open("/tmp/resp.wav", "wb") as f:
-                    f.write(base64.b64decode(audio_content))
-                self.agi.stream_file("/tmp/resp")
+                resp_json = response.json()
+                logging.debug(f"TTS Response: {resp_json.keys()}")
+                audios = resp_json.get("audios", [])
+                if audios:
+                    audio_content = audios[0]
+                    with open(f"{self.resp_path}.wav", "wb") as f:
+                        f.write(base64.b64decode(audio_content))
+                    self.agi.stream_file(self.resp_path)
+                else:
+                    self.log(f"TTS Error: No audio in response. Body: {response.text}")
             else:
-                self.log(f"TTS Error: {response.text}")
+                self.log(f"TTS Error {response.status_code}: {response.text}")
         except Exception as e:
             self.log(f"TTS Exception: {str(e)}")
         finally:
@@ -155,9 +178,8 @@ class MultilingualVoiceAgent:
 
     def listen_and_transcribe(self):
         """Record audio with aggressive silence detection for low latency."""
-        self.log("Listening...")
-        # Reduced timeout to 3s for snappier interaction
-        self.agi.record_file(self.recording_path, "wav", "#", 3000, 0, True, 2)
+        # Increased timeout to 8s and silence to 3s for better stability
+        self.agi.record_file(self.recording_path, "wav", "#", 8000, 0, True, 3)
         
         if not os.path.exists(f"{self.recording_path}.wav"):
             return None
@@ -170,14 +192,19 @@ class MultilingualVoiceAgent:
                 data = {"language_code": self.language, "model": "saarika:v2.5"}
                 headers = {"api-subscription-key": SARVAM_API_KEY}
                 
-                response = requests.post(SARVAM_STT_URL, files=files, data=data, headers=headers)
+                # Added verify=False
+                response = requests.post(SARVAM_STT_URL, files=files, data=data, headers=headers, verify=False)
+                logging.debug(f"STT Response Status: {response.status_code}")
                 if response.status_code == 200:
+                    resp_json = response.json()
+                    logging.debug(f"STT Response: {resp_json}")
                     self.log(f"STT Latency: {time.time() - start_stt:.2f}s")
-                    transcript = response.json().get("transcript", "")
+                    transcript = resp_json.get("transcript", "")
                     self.log(f"User said: {transcript}")
                     self.conversation.append({"role": "user", "content": transcript, "lang": self.language})
                     return transcript
                 else:
+                    self.log(f"STT Error {response.status_code}: {response.text}")
         except Exception as e:
             self.log(f"STT Exception: {str(e)}")
         return None
@@ -198,7 +225,7 @@ class MultilingualVoiceAgent:
         # Extract offers from knowledge graph if available
         offers_text = "Check current availability."
         try:
-            kg_data = json.loads(knowledge)
+            kg_data = json.loads(self.knowledge_base)
             offers = []
             for p in kg_data.get("products", []):
                 if p.get("current_offers"):
@@ -283,7 +310,8 @@ class MultilingualVoiceAgent:
         }
         
         try:
-            response = requests.post(GROQ_URL, json=payload, headers=headers)
+            # Added verify=False
+            response = requests.post(GROQ_URL, json=payload, headers=headers, verify=False)
             if response.status_code == 200:
                 self.log(f"LLM Latency: {time.time() - start_llm:.2f}s")
                 content = response.json()["choices"][0]["message"].get("content")
@@ -314,7 +342,7 @@ class MultilingualVoiceAgent:
                                     self.active_agent = staff
                                     self.log(f"Switched to Persona: {staff['name']} ({staff['voice_gender']})")
                                     # Update active_agent.json for persistence
-                                    with open("/home/satoru/Desktop/ds/active_agent.json", "w") as f:
+                                    with open("/home/satoru/Desktop/ather/active_agent.json", "w") as f:
                                         json.dump(staff, f, indent=4)
                                     break
                             content = content.replace(f"[SWITCH_AGENT: {agent_name}]", "").replace(f"[SWITCH_AGENT:{agent_name}]", "").strip()
@@ -414,56 +442,66 @@ class MultilingualVoiceAgent:
             self.agi.answer()
             time.sleep(0.5)
             
-            # Use profile loaded in __init__
-            customer_name = self.user_profile.get("name", "Unknown")
-            customer_lang = self.user_profile.get("language")
+            # 1. ALWAYS ask for language preference at the start
+            self.log("Playing initial language selection menu...")
+            # We use English for the initial menu
+            self.say("Welcome to Ather Energy. For English, press 1. \u0c95\u0ca8\u0ccd\u0ca8\u0ca1\u0c95\u0ccd\u0c95\u0cbe\u0c97\u0cbf 2 \u0c92\u0ca4\u0ccd\u0ca4\u0cbf\u0cb0\u0cbf. \u0939\u093f\u0902\u0926\u0940 \u0915\u0947 \u0932\u093f\u090f 3 \u0926\u092c\u093e\u090f\u0902.", "en-IN")
             
-            if customer_name != "Unknown" and customer_lang:
-                self.language = customer_lang
-                self.log(f"Proactive Recognition: {customer_name} ({customer_lang})")
-                
-                # Immediate personalized greeting using loaded persona
-                agent_name = self.active_agent.get("name", "Aura")
-                if self.language == "kn-IN":
-                    self.say(f"\u0ca8\u0cae\u0cb8\u0ccd\u0c95\u0cbe\u0cb0 {customer_name} \u0c85\u0cb5\u0cb0\u0cc7, \u0ca8\u0cae\u0ccd\u0cae \u0c85\u0ca5\u0cb0\u0ccd \u0c8e\u0ca8\u0cb0\u0ccd\u0c9c\u0cbf\u0c97\u0cc6 \u0cb8\u0ccd\u0cb5\u0cbe\u0c97\u0ca4. \u0ca8\u0cbe\u0ca8\u0cc1 {agent_name}, \u0ca8\u0cbf\u0cae\u0c97\u0cc6 \u0cb9\u0cc7\u0c97\u0cc6 \u0cb8\u0cb9\u0cbe\u0caf \u0cae\u0cbe\u0ca1\u0cac\u0cb2\u0ccd\u0cb2\u0cc6?")
-                elif self.language == "hi-IN":
-                    self.say(f"\u0928\u092e\u0938\u094d\u0924\u0947 {customer_name} \u091c\u0940, \u090f\u0925\u0930 \u090f\u0928\u0930\u094d\u091c\u0940 \u092e\u0947\u0902 \u0906\u092a\u0915\u093e \u0938\u094d\u0935\u093e\u0917\u0924 \u0939\u0948\u0964 \u092e\u0948\u0902 {agent_name} \u0939\u0942\u0901, \u0906\u092a\u0915\u0940 \u0915\u094d\u092f\u093e \u092e\u0926\u0926 \u0915\u0930 \u0938\u0915\u0924\u093e \u0939\u0942\u0901?")
-                else:
-                    self.say(f"Welcome back {customer_name}! I am {agent_name} from Ather Energy. How can I assist you with your scooter today?")
+            digit = self.agi.wait_for_digit(8000)
+            if digit == '2':
+                self.language = "kn-IN"
+            elif digit == '3':
+                self.language = "hi-IN"
             else:
-                # Fallback to Language Selection Menu
-                self.log("Unknown caller. Playing language menu...")
-                self.say("Welcome. For English press 1. \u0c95\u0ca8\u0ccd\u0ca8\u0ca1\u0c95\u0ccd\u0c95\u0cbe\u0c97\u0cbf 2 \u0c92\u0ca4\u0ccd\u0ca4\u0cbf\u0cb0\u0cbf. \u0939\u093f\u0902\u0926\u0940 \u0915\u0947 \u0932\u093f\u090f 3 \u0926\u092c\u093e\u090f\u0902.", "en-IN")
-                
-                digit = self.agi.wait_for_digit(4000)
-                if digit == '2':
-                    self.language = "kn-IN"
-                    self.user_profile["language"] = "kn-IN"
-                    self.say("\u0ca7\u0ca8\u0ccd\u0caf\u0cb5\u0cbe\u0ca6\u0c97\u0cb3\u0cc1. \u0ca8\u0cbf\u0cae\u0ccd\u0cae \u0cb9\u0cc6\u0cb8\u0cb0\u0cc7\u0ca8\u0cc1?")
-                elif digit == '3':
-                    self.language = "hi-IN"
-                    self.user_profile["language"] = "hi-IN"
-                    self.say("\u0927\u0928\u094d\u092f\u0935\u093e\u0926\u0964 \u0906\u092a\u0915\u093e \u0928\u093e\u092e \u0915\u094d\u092f\u093e \u0939\u0948?")
+                self.language = "en-IN" # Default to English
+            
+            self.user_profile["language"] = self.language
+            self.log(f"Language selected: {self.language}")
+
+            # 2. Personalized Greeting based on selection
+            customer_name = self.user_profile.get("name", "Unknown")
+            agent_name = self.active_agent.get("name", "Aura")
+            
+            if customer_name != "Unknown":
+                if self.language == "kn-IN":
+                    self.say(f"\u0ca8\u0cae\u0cb8\u0ccd\u0c95\u0cbe\u0cb0 {customer_name} \u0c85\u0cb5\u0cb0\u0cc7, \u0ca8\u0cbe\u0ca8\u0cc1 {agent_name}. \u0ca8\u0cbf\u0cae\u0c97\u0cc6 \u0cb9\u0cc7\u0c97\u0cc6 \u0cb8\u0cb9\u0cbe\u0caf \u0cae\u0cbe\u0ca1\u0cac\u0cb2\u0ccd\u0cb2\u0cc6?")
+                elif self.language == "hi-IN":
+                    self.say(f"नमस्ते {customer_name} जी, मैं {agent_name} हूँ। मैं आपकी क्या मदद कर सकता हूँ?")
                 else:
-                    self.language = "en-IN"
-                    self.user_profile["language"] = "en-IN"
-                    self.say("Thank you. May I know your name please?")
+                    self.say(f"Hello {customer_name}! I am {agent_name}. How can I assist you with your Ather scooter today?")
+            else:
+                # Ask for name if unknown
+                if self.language == "kn-IN":
+                    self.say(f"\u0ca8\u0cae\u0ccd\u0cae \u0c85\u0ca5\u0cb0\u0ccd \u0c8e\u0ca8\u0cb0\u0ccd\u0c9c\u0cbf\u0c97\u0cc6 \u0cb8\u0ccd\u0cb5\u0cbe\u0c97\u0ca4. \u0ca8\u0cbe\u0ca8\u0cc1 {agent_name}, \u0ca8\u0cbf\u0cae\u0ccd\u0cae \u0cb9\u0cc6\u0cb8\u0cb0\u0cc7\u0ca8\u0cc1?")
+                elif self.language == "hi-IN":
+                    self.say(f"एथर एनर्जी में आपका स्वागत है। मैं {agent_name} हूँ, आपका नाम क्या है?")
+                else:
+                    self.say(f"Welcome to Ather Energy. I am {agent_name}. May I know your name please?")
             
             # Global Conversation Loop
             while True:
                 user_text = self.listen_and_transcribe()
-                if user_text:
-                    llm_reply = self.get_llm_response(user_text)
-                    self.say(llm_reply)
+                # Continue if user text is empty string (just didn't catch speech)
+                # But break if it's None (error or actual hangup)
+                if user_text is not None:
+                    if user_text.strip():
+                        llm_reply = self.get_llm_response(user_text)
+                        self.say(llm_reply)
+                    else:
+                        # User was silent or STT failed to find words
+                        # Instead of breaking, we could ask "Are you still there?"
+                        # But for now, we'll just listen again or break after multiple silences.
+                        # For simplicity, let's just listen again.
+                        continue
                 else:
-                    break # End call on silence
+                    break # End call on error or hangup
         except Exception as e:
             self.log(f"CRITICAL ERROR in Run: {str(e)}")
         finally:
             # Save conversation to JSON
             try:
                 unique_id = self.agi.get_variable("UNIQUEID") or datetime.now().strftime("%Y%m%d_%H%M%S")
-                log_dir = "/home/satoru/Desktop/ds/calls"
+                log_dir = "/home/satoru/Desktop/ather/calls"
                 
                 # Ensure directory exists
                 if not os.path.exists(log_dir):

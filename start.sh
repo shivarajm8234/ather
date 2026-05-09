@@ -32,20 +32,18 @@ pkill -f "telegram_bot.py" 2>/dev/null || true
 sleep 1
 
 # 4. Start Dashboard
-echo "🌐 Launching Premium Dashboard (Port 8000)..."
-cd "$PROJECT_DIR/dashboard"
-nohup python3 server.py > "$PROJECT_DIR/dashboard.log" 2>&1 &
+echo "🌐 Launching Premium Dashboard (Port 8001)..."
+nohup "$PROJECT_DIR/venv/bin/python3" "$PROJECT_DIR/server.py" > "$PROJECT_DIR/dashboard.log" 2>&1 &
 echo "   ✅ Dashboard LIVE"
 
 # 5. Start Proactive Outreach Agent
 echo "🤖 Launching Proactive Outreach Agent..."
-cd "$PROJECT_DIR"
-nohup python3 -u proactive_agent.py > "$PROJECT_DIR/proactive.log" 2>&1 &
+nohup "$PROJECT_DIR/venv/bin/python3" -u "$PROJECT_DIR/proactive_agent.py" > "$PROJECT_DIR/proactive.log" 2>&1 &
 echo "   ✅ Outreach Agent LIVE"
 
 # 6. Start Telegram Bot
 echo "💬 Launching Customer Support Bot..."
-nohup python3 -u telegram_bot.py > "$PROJECT_DIR/bot.log" 2>&1 &
+nohup "$PROJECT_DIR/venv/bin/python3" -u "$PROJECT_DIR/telegram_bot.py" > "$PROJECT_DIR/bot.log" 2>&1 &
 echo "   ✅ Telegram Bot LIVE"
 
 echo ""
@@ -53,10 +51,10 @@ echo "========================================================"
 echo "  🎉 ATHER INTELLIGENCE SYSTEM IS NOW ONLINE!"
 echo "========================================================"
 echo ""
-echo "  🌐 Dashboard:    http://localhost:8000"
+echo "  🌐 Dashboard:    http://localhost:8001"
 echo "  🤖 Outreach:     Tracking via proactive.log"
 echo "  📞 Voice:        Dial extension 3000"
 echo "  📁 System Logs:  $PROJECT_DIR/*.log"
 echo ""
-echo "  Use 'pkill -f python3' to stop all services if needed."
+echo "  Use './stop.sh' to stop all services."
 echo "========================================================"

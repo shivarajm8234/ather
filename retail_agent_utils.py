@@ -3,9 +3,9 @@ import os
 import uuid
 from datetime import datetime
 
-LEADS_FILE = "/home/satoru/Desktop/ds/leads.json"
-SERVICE_FILE = "/home/satoru/Desktop/ds/service_records.json"
-AVAILABILITY_FILE = "/home/satoru/Desktop/ds/service_availability.json"
+LEADS_FILE = "/home/satoru/Desktop/ather/leads.json"
+SERVICE_FILE = "/home/satoru/Desktop/ather/service_records.json"
+AVAILABILITY_FILE = "/home/satoru/Desktop/ather/service_availability.json"
 
 STATIONS = ["Station A", "Station B", "Station C"]
 WORKING_HOURS = ["10:00", "11:00", "12:00", "13:00", "14:00", "15:00", "16:00", "17:00"]
@@ -42,7 +42,7 @@ def add_lead(name, phone, source="Voice Call", notes="", priority="Medium", stat
         return existing_lead
 
     # --- Agentic Allotment Logic ---
-    staff_file = "/home/satoru/Desktop/ds/staff.json"
+    staff_file = "/home/satoru/Desktop/ather/staff.json"
     staff_members = load_data(staff_file)
     assigned_to = "Unassigned"
     
@@ -90,7 +90,7 @@ def get_user_profile(phone):
     """Load or create a user profile based on phone number (normalized)."""
     # Normalize: remove +, spaces, and leading zeros for better matching
     clean_phone = "".join(filter(str.isdigit, str(phone)))[-10:]
-    profile_path = f"/home/satoru/Desktop/ds/users/user_{clean_phone}.json"
+    profile_path = f"/home/satoru/Desktop/ather/users/user_{clean_phone}.json"
     
     if os.path.exists(profile_path):
         with open(profile_path, 'r') as f:
@@ -104,7 +104,7 @@ def save_user_profile(profile):
     """Save user profile to its own JSON file."""
     phone = profile.get("phone", "unknown")
     clean_phone = "".join(filter(str.isdigit, str(phone)))[-10:]
-    profile_path = f"/home/satoru/Desktop/ds/users/user_{clean_phone}.json"
+    profile_path = f"/home/satoru/Desktop/ather/users/user_{clean_phone}.json"
     save_data(profile_path, profile)
 
 def summarize_conversation(conversation):
@@ -179,7 +179,7 @@ def book_service_slot(name, phone, date_str, time_str):
     return True, f"Booked at {station} for {clean_time}"
 
 def save_feedback(name, phone, feedback_text):
-    feedback_file = "/home/satoru/Desktop/ds/feedback.json"
+    feedback_file = "/home/satoru/Desktop/ather/feedback.json"
     data = load_data(feedback_file)
     new_fb = {
         "id": str(uuid.uuid4())[:8],

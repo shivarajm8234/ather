@@ -2,11 +2,15 @@ import os
 import telebot
 import json
 import requests
+import urllib3
 from datetime import datetime
 from dotenv import load_dotenv
 
+# Suppress SSL warnings
+urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
+
 # Load credentials
-ENV_PATH = "/home/satoru/Desktop/ds/.env"
+ENV_PATH = "/home/satoru/Desktop/ather/.env"
 load_dotenv(ENV_PATH)
 TOKEN = os.getenv("TELEGRAM_BOT_TOKEN")
 SARVAM_API_KEY = os.getenv("SARVAM_API_KEY")
@@ -16,8 +20,8 @@ if not TOKEN:
     exit(1)
 
 bot = telebot.TeleBot(TOKEN)
-KG_PATH = "/home/satoru/Desktop/ds/knowledge_graph.json"
-MSG_LOG_PATH = "/home/satoru/Desktop/ds/telegram_messages.json"
+KG_PATH = "/home/satoru/Desktop/ather/knowledge_graph.json"
+MSG_LOG_PATH = "/home/satoru/Desktop/ather/telegram_messages.json"
 
 def get_current_kg():
     with open(KG_PATH, "r") as f:
@@ -105,7 +109,7 @@ CRITICAL INSTRUCTIONS:
     }
     
     try:
-        response = requests.post("https://api.sarvam.ai/v1/chat/completions", json=payload, headers=headers, timeout=30)
+        response = requests.post("https://api.sarvam.ai/v1/chat/completions", json=payload, headers=headers, timeout=30, verify=False)
         if response.status_code == 200:
             raw_content = response.json()["choices"][0]["message"].get("content")
             
