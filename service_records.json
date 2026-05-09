@@ -42,7 +42,31 @@
         "vehicle_no": "KA-SYNC",
         "current_km": 0,
         "service_type": "Voice Booking",
-        "status": "Scheduled",
+        "status": "Cancelled",
+        "appointment_date": "2026-05-10",
+        "appointment_time": "12:00",
+        "station": "Station A"
+    },
+    {
+        "id": "SF176",
+        "customer_name": "Shivaraj",
+        "phone": "2000",
+        "vehicle_no": "KA-SYNC",
+        "current_km": 0,
+        "service_type": "Voice Booking",
+        "status": "Cancelled",
+        "appointment_date": "2026-05-10",
+        "appointment_time": "10:00",
+        "station": "Station A"
+    },
+    {
+        "id": "SDC76",
+        "customer_name": "Shivaraj",
+        "phone": "2000",
+        "vehicle_no": "KA-SYNC",
+        "current_km": 0,
+        "service_type": "Voice Booking",
+        "status": "Cancelled",
         "appointment_date": "2026-05-10",
         "appointment_time": "12:00",
         "station": "Station A"

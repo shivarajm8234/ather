@@ -317,12 +317,17 @@ class MultilingualVoiceAgent:
                 all_services = json.load(f)
                 user_services = [s for s in all_services if str(s.get("phone")) == str(self.caller_id)]
                 if user_services:
-                    # Sort by date and take last 3
-                    user_services.sort(key=lambda x: str(x.get('appointment_date', '0000-00-00')), reverse=True)
+                    # Prioritize 'Scheduled' then sort by date and time
+                    user_services.sort(key=lambda x: (
+                        0 if x.get('status') == 'Scheduled' else 1,
+                        x.get('appointment_date', '0000-00-00'),
+                        x.get('appointment_time', '00:00')
+                    ))
                     details = []
-                    for s in user_services[:3]:
+                    # Take up to 5 records to be safe
+                    for s in user_services[:5]:
                         details.append(f"- {s.get('service_type')} | Status: {s.get('status')} | Date: {s.get('appointment_date', 'TBD')} at {s.get('appointment_time', 'TBD')}")
-                    personal_service_context = "USER SERVICE STATUS (RECENT):\n" + "\n".join(details)
+                    personal_service_context = "USER SERVICE STATUS (ACTIVE & RECENT):\n" + "\n".join(details)
         except:
             pass
 
@@ -373,86 +378,37 @@ class MultilingualVoiceAgent:
         {history_context}
         {personal_service_context}
         
+        PROMPT PRIORITY:
+        1. BACKEND TAGS: Your primary duty is to trigger system actions. If an action (Book/Cancel/Lead) is confirmed, you MUST include the corresponding tag.
+        2. BREVITY: Keep your verbal response to exactly ONE short sentence.
+        3. LANGUAGE: Always speak in {prompt_language}.
+
+        SERVICE BOOKING PROTOCOL:
+        - PHASE 1 (Inquiry): If the user wants to book, ask: "Which date and time would you prefer?"
+        - PHASE 2 (Confirmation): Once they provide a time, ask: "Shall I confirm your booking for [Time]?"
+        - PHASE 3 (Execution): IF AND ONLY IF they say "Yes", "Confirm", or "Do it", you MUST respond with: "[Verbal Confirmation Sentence] [BOOK_SERVICE: YYYY-MM-DD HH:MM]".
+        - NEVER skip Phase 3 tags if you say "It is booked".
+
         RULES:
-        1. ABSOLUTE LANGUAGE LOCK: You MUST respond STRICTLY in {prompt_language}. Even if the customer speaks in English, Hindi, or gibberish, your output MUST ALWAYS be in {prompt_language}. Do not translate the customer's language; enforce your own.
-        2. NO REPETITIVE GREETINGS: You have already greeted the customer. Do NOT say "Namaste", "Hello", or "Namasakra" again in your response. Get straight to the point.
-        3. NUMBERS & DATES: When speaking to the customer, ALWAYS spell out dates and times naturally in {prompt_language} (e.g., 'ನಾಳೆ ಬೆಳಿಗ್ಗೆ 10 ಗಂಟೆಗೆ' or 'Tomorrow at 10 AM'). ONLY use the YYYY-MM-DD format INSIDE the [BOOK_SERVICE] tag.
-        4. SELECTIVE PERSONA SHIFT (STABLE): Only shift persona if the customer explicitly asks for a different person OR if the topic changes completely. 
-           - Avoid shifting if you can handle the query yourself.
-           - Technical/Battery deep-dives or general "Technical Experts" -> SHIFT_TO: Kavi
-           - Pricing/Offers/Escalations or complaints -> SHIFT_TO: Zephyr
-           - Software/HUD/Maps -> SHIFT_TO: Arya
-           - Accessories/Community -> SHIFT_TO: Isha
-        5. If they ask for an expert, use [SHIFT_TO: <Name>] based on the mapping above. DO NOT default to Zephyr for technical issues.
-        6. SERVICE BOOKING & SCHEDULING (STRICT LOGIC): 
-           - EXPLICIT CONFIRMATION REQUIRED: If the customer asks to book a slot OR cancel a slot, you MUST first ask for their explicit confirmation (e.g., "Shall I confirm this booking for 10 AM?" or "Are you sure you want to cancel?"). Do NOT use the tags yet.
-           - ONLY append the [BOOK_SERVICE: YYYY-MM-DD HH:MM] or [CANCEL_SERVICE] tag IF the customer has explicitly said "Yes", "Confirm", or clearly agreed in their PREVIOUS turn.
-           - If the customer asks "When is my schedule?", read their 'USER SERVICE STATUS'. Do NOT attempt to create a new booking.
-           - Check the BUSY SLOTS: {', '.join(busy_slots) if busy_slots else 'None'}. Suggest available times if their requested time is busy.
-           - DOUBLE BOOKING PREVENTION: Check the 'USER SERVICE STATUS' above. If they have a 'Scheduled' appointment, REFUSE to book a new one. Tell them they must cancel first.
-           - TECHNICAL SUPPORT RULE: If the customer describes a problem (e.g., "headlight not working", "battery issue"), you MUST answer their question using your knowledge base. DO NOT suggest booking a service slot unless they explicitly ask to book an appointment.
-           - NEVER say "I have booked it" or "I have cancelled it" without the appropriate tag. If you say it, you MUST include the tag.
-        7. If they want to buy, answer and mark as [HOT_LEAD].
-        8. TAG PLACEMENT: Always place tags like [BOOK_SERVICE:...], [CANCEL_SERVICE], [HOT_LEAD], or [SHIFT_TO:...] at the VERY END of your response.
-        9. ONE-SENTENCE LIMIT (CRITICAL): Speak naturally but be EXTREMELY BRIEF. You MUST keep your response to EXACTLY ONE short sentence. Long responses cause critical system crashes. DO NOT output more than one sentence!
-        10. If the customer provides their name, include it in your response as [UPDATE_NAME: CustomerName].
-
-        CURRENT IDENTITY:
-        Agent Name: {self.active_agent['name']}
-        Role: {self.active_agent.get('role', 'Specialist')}
-        Today's Date: {datetime.now().strftime('%Y-%m-%d')}
-        Customer Name: {self.user_profile.get('name', 'Unknown')}
-        Customer Phone: {self.caller_id}
+        1. ABSOLUTE LANGUAGE LOCK: Respond ONLY in {prompt_language}.
+        2. NO REPETITIVE GREETINGS.
+        3. NUMBERS & DATES: Spell out dates/times naturally in the sentence, but use YYYY-MM-DD HH:MM in the tag.
+        4. RESCHEDULING: If they want to change a time, use BOTH [CANCEL_SERVICE] AND [BOOK_SERVICE: YYYY-MM-DD HH:MM].
+        5. ONE-SENTENCE LIMIT: Tags do NOT count as a sentence. Always put them at the end.
+        6. TECHNICAL SUPPORT: Answer tech questions first. Don't push booking unless asked.
         
-        CONTEXT:
-        {self._format_knowledge(self.knowledge_base)}
-        
-        CUSTOMER HISTORY:
-        {self.user_profile.get('history', 'No previous history.')}
-        
-        {history_context}
-        
-        USER QUERY: {text}
-
-        RETAIL RULES:
-        1. NEVER say 'we will call you back'. Handle everything NOW.
-        2. If they want to buy, answer questions and mark as [HOT_LEAD].
-        3. If they want service, check availability and BOOK it immediately using [BOOK_SERVICE: YYYY-MM-DD HH:MM].
-        4. If the intent shifts, use [SHIFT_TO: Name].
-        5. Stay concise, crisp, and professional.
-        
-        INTERNAL TAGS (APPEND IF NEEDED):
-        [SHIFT_TO: Name], [HOT_LEAD], [SERVICE_QUERY], [BOOK_SERVICE: YYYY-MM-DD HH:MM], [UPDATE_NAME: <name>], [FEEDBACK: <text>]
+        INTERNAL TAGS (APPEND TO END):
+        [BOOK_SERVICE: YYYY-MM-DD HH:MM], [CANCEL_SERVICE], [HOT_LEAD], [SHIFT_TO: Name], [UPDATE_NAME: Name], [FEEDBACK: Text]
         """
         
         self.log("LLM Thinking (Groq)...")
         start_llm = time.time()
         
-        # Build prompt with explicit language instruction
-        lang_map = {"en-IN": "English", "kn-IN": "Kannada", "hi-IN": "Hindi"}
-        target_lang = lang_map.get(self.language, "English")
-        
-        system_instr = f"""
-        STRICT LANGUAGE LOCK: You must respond ONLY in {target_lang}. NEVER use other languages.
-        CUSTOMER IDENTIFIED: {self.user_profile.get('name', 'Unknown')}
-        
-        MANDATORY OPERATIONAL TAGS:
-        - If customer wants to buy, asks price, or shows high interest: ALWAYS include [HOT_LEAD] in your response.
-        - If customer gives an opinion or feedback: ALWAYS include [FEEDBACK: "summary of feedback"] in your response.
-        - If customer says their name: ALWAYS include [UPDATE_NAME: "Correct Name"] in your response.
-        - If booking a service: YOU MUST FIRST ASK FOR THEIR PREFERRED DATE AND TIME. After they provide it, include [BOOK_SERVICE: YYYY-MM-DD HH:MM] in your response. NEVER book without asking for a specific time.
-        
-        RULES:
-        1. IF NAME IS KNOWN (not 'Unknown'), NEVER ASK FOR IT. USE IT TO ADDRESS THEM.
-        2. NEVER change the language from {target_lang}.
-        3. Solve everything in this call.
-        """
-        
         # Build messages including history
         messages = [{"role": "system", "content": prompt}]
         
-        # Add past context (last 10 turns for tokens)
-        for turn in self.conversation[-10:]:
+        # Add past context (last 4 turns for tokens)
+        for turn in self.conversation[-4:]:
             role = "assistant" if turn["role"] == "agent" else "user"
             messages.append({"role": role, "content": turn["content"]})
             
@@ -460,7 +416,7 @@ class MultilingualVoiceAgent:
         messages.append({"role": "user", "content": text})
         
         payload = {
-            "model": "qwen/qwen3-32b",
+            "model": "meta-llama/llama-4-scout-17b-16e-instruct",
             "messages": messages,
             "temperature": 0.3
         }
@@ -469,156 +425,140 @@ class MultilingualVoiceAgent:
             "Content-Type": "application/json"
         }
         
-        try:
-            # Added verify=False
-            response = requests.post(GROQ_URL, json=payload, headers=headers, verify=False, timeout=10)
-            if response.status_code == 200:
-                self.log(f"LLM Latency: {time.time() - start_llm:.2f}s")
-                content = response.json()["choices"][0]["message"].get("content")
-                if content:
-                    # Strip <think> tags for Qwen reasoning models
-                    content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
-                    
-                    self.conversation.append({"role": "agent", "content": content, "lang": self.language})
-                    # 1. Passive Interest Detection (Safety Net for Dashboard Updates)
-                    lower_text = text.lower()
-                    if any(word in lower_text for word in ["buy", "price", "booking", "interested", "cost", "showroom", "test ride"]):
-                        if "[HOT_LEAD]" not in content:
-                            content += " [HOT_LEAD]"
-                    
-                    if any(word in lower_text for word in ["good", "bad", "problem", "excellent", "worst", "feedback", "service is"]):
-                        if "[FEEDBACK:" not in content:
-                            content += f" [FEEDBACK: Customer opinion: {text[:60]}]"
-
-                    # 2. Logic to log leads based on tags
-                    if "[SWITCH_AGENT:" in content or "[SHIFT_TO:" in content:
-                        try:
-                            tag = "[SWITCH_AGENT:" if "[SWITCH_AGENT:" in content else "[SHIFT_TO:"
-                            agent_name = content.split(tag)[1].split("]")[0].strip()
-                            for staff in self.staff_list:
-                                if staff['name'].lower() == agent_name.lower():
-                                    transition_msg = self._get_transition_msg(staff['name'], staff.get('role', 'Specialist'))
-                                    self.say(transition_msg)
-                                    self.active_agent = staff
-                                    self.log(f"Switched to Persona: {staff['name']} ({staff['voice_gender']})")
-                                    # Update active_agent.json for persistence
-                                    with open("/home/satoru/Desktop/ather/active_agent.json", "w") as f:
-                                        json.dump(staff, f, indent=4)
-                                    break
-                            content = content.replace(f"{tag}{agent_name}]", "").strip()
-                        except Exception as e:
-                            self.log(f"Persona shift failed: {e}")
-
-                    if "[HOT_LEAD]" in content:
-                        # Determine stage based on context
-                        stage = "New Enquiry"
-                        if any(w in lower_text for w in ["test ride", "drive", "visit", "showroom"]):
-                            stage = "Test Ride"
-                        elif any(w in lower_text for w in ["discount", "price", "offer", "negotiate"]):
-                            stage = "Negotiation"
-                        elif any(w in lower_text for w in ["book", "order", "purchase"]):
-                            stage = "Booking"
-                        elif any(w in lower_text for w in ["contact", "called", "speak"]):
-                            stage = "Contacted"
-                            
-                        retail_agent_utils.add_lead(
-                            self.user_profile.get("name", "Unknown"), 
-                            self.caller_id, 
-                            notes=text, 
-                            priority="Hot",
-                            status=stage
-                        )
-                        content = content.replace("[HOT_LEAD]", "").strip()
-                    
-                    if "[FEEDBACK:" in content:
-                        try:
-                            fb_text = content.split("[FEEDBACK:")[1].split("]")[0].strip()
-                            retail_agent_utils.save_feedback(self.user_profile.get("name", "Unknown"), self.caller_id, fb_text)
-                            content = content.split("[FEEDBACK:")[0] + content.split("]")[1]
-                        except:
-                            pass
-                        content = content.strip()
-                    
-                    if "[BOOK_SERVICE:" in content:
-                        # Extract date/time: [BOOK_SERVICE: 2026-05-09 14:00]
-                        try:
-                            booking_info = content.split("[BOOK_SERVICE:")[1].split("]")[0].strip()
-                            parts = booking_info.split(" ")
-                            b_date = parts[0]
-                            # Robust date check: if only day is given (e.g. "20"), add current month/year
-                            if "-" not in b_date:
-                                b_date = f"{datetime.now().year}-{datetime.now().month:02d}-{int(b_date):02d}"
-                            
-                            b_time = parts[1] if len(parts) > 1 else "10:00"
-                            success, msg = retail_agent_utils.book_service_slot(self.user_profile.get("name", "Unknown"), self.caller_id, b_date, b_time)
-                            if success:
-                                content = content.split("[BOOK_SERVICE:")[0] + f" (Confirmed: {msg}) " + content.split("]")[1]
-                            else:
-                                content = content.split("[BOOK_SERVICE:")[0] + " (Slot Full, try another time) " + content.split("]")[1]
-                        except:
-                            pass
-
-                    if "[CANCEL_SERVICE]" in content:
-                        try:
-                            success, msg = retail_agent_utils.cancel_service_slot(self.caller_id)
-                            content = content.replace("[CANCEL_SERVICE]", "").strip()
-                        except:
-                            pass
-                        content = content.strip()
-
-                    if "[SHIFT_TO:" in content:
-                        try:
-                            target_name = content.split("[SHIFT_TO:")[1].split("]")[0].strip()
-                            if self._switch_agent(target_name):
-                                content = content.split("[SHIFT_TO:")[0] + content.split("]")[1]
-                        except:
-                            pass
-                        content = content.strip()
+        max_retries = 2
+        for attempt in range(max_retries):
+            try:
+                response = requests.post(GROQ_URL, json=payload, headers=headers, verify=False, timeout=10)
+                if response.status_code == 200:
+                    self.log(f"LLM Latency: {time.time() - start_llm:.2f}s")
+                    content = response.json()["choices"][0]["message"].get("content")
+                    if content:
+                        # Strip <think> tags for Qwen reasoning models
+                        content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
                         
-                    if "[UPDATE_NAME:" in content:
-                        try:
-                            new_name = content.split("[UPDATE_NAME:")[1].split("]")[0].strip()
-                            self.user_profile["name"] = new_name
-                        except:
-                            pass
+                        self.conversation.append({"role": "agent", "content": content, "lang": self.language})
+                        
+                        # 1. Passive Interest Detection (Safety Net for Dashboard Updates)
+                        lower_text = text.lower()
+                        if any(word in lower_text for word in ["buy", "price", "booking", "interested", "cost", "showroom", "test ride"]):
+                            if "[HOT_LEAD]" not in content:
+                                content += " [HOT_LEAD]"
+                        
+                        if any(word in lower_text for word in ["good", "bad", "problem", "excellent", "worst", "feedback", "service is"]):
+                            if "[FEEDBACK:" not in content:
+                                content += f" [FEEDBACK: Customer opinion: {text[:60]}]"
 
-                    if "[FEEDBACK:" in content:
-                        try:
-                            fb_text = content.split("[FEEDBACK:")[1].split("]")[0].strip()
-                            # Deep AI Analysis for Feedback
-                            analysis = self.analyze_feedback_with_ai(fb_text)
-                            retail_agent_utils.save_feedback(
+                        # 2. Logic to log leads based on tags
+                        if "[SWITCH_AGENT:" in content or "[SHIFT_TO:" in content:
+                            try:
+                                tag = "[SWITCH_AGENT:" if "[SWITCH_AGENT:" in content else "[SHIFT_TO:"
+                                agent_name = content.split(tag)[1].split("]")[0].strip()
+                                for staff in self.staff_list:
+                                    if staff['name'].lower() == agent_name.lower():
+                                        transition_msg = self._get_transition_msg(staff['name'], staff.get('role', 'Specialist'))
+                                        self.say(transition_msg)
+                                        self.active_agent = staff
+                                        self.log(f"Switched to Persona: {staff['name']} ({staff['voice_gender']})")
+                                        # Update active_agent.json for persistence
+                                        with open("/home/satoru/Desktop/ather/active_agent.json", "w") as f:
+                                            json.dump(staff, f, indent=4)
+                                        break
+                                content = content.replace(f"{tag}{agent_name}]", "").strip()
+                            except Exception as e:
+                                self.log(f"Persona shift failed: {e}")
+
+                        if "[HOT_LEAD]" in content:
+                            # Determine stage based on context
+                            stage = "New Enquiry"
+                            if any(w in lower_text for w in ["test ride", "drive", "visit", "showroom"]):
+                                stage = "Test Ride"
+                            elif any(w in lower_text for w in ["discount", "price", "offer", "negotiate"]):
+                                stage = "Negotiation"
+                            elif any(w in lower_text for w in ["book", "order", "purchase"]):
+                                stage = "Booking"
+                            elif any(w in lower_text for w in ["contact", "called", "speak"]):
+                                stage = "Contacted"
+                                
+                            retail_agent_utils.add_lead(
                                 self.user_profile.get("name", "Unknown"), 
                                 self.caller_id, 
-                                fb_text,
-                                sentiment=analysis.get("sentiment", "Neutral"),
-                                rating=analysis.get("rating", 3),
-                                summary=analysis.get("summary", ""),
-                                churn_risk=analysis.get("churn_risk", "Low"),
-                                purchase_probability=analysis.get("purchase_probability", "Medium"),
-                                tone=analysis.get("tone", "Neutral"),
-                                recommendation=analysis.get("recommendation", "Follow up")
+                                notes=text, 
+                                priority="Hot",
+                                status=stage
                             )
-                        except:
-                            pass
-                    
-                    # Final clean of all tags before returning to say()
-                    content = re.sub(r'\[[^\]]*\]?', '', content).strip()
-                    content = re.sub(r'\([^)]*\)?', '', content).strip()
-                    
-                    return content
-
-                    if "[SERVICE_QUERY]" in content:
-                        content = content.replace("[SERVICE_QUERY]", "").strip()
+                            content = content.replace("[HOT_LEAD]", "").strip()
                         
-                    return content
+                        if "[CANCEL_SERVICE]" in content:
+                            try:
+                                success, msg = retail_agent_utils.cancel_service_slot(self.caller_id)
+                                content = content.replace("[CANCEL_SERVICE]", "").strip()
+                            except:
+                                pass
+                            content = content.strip()
+
+                        if "[BOOK_SERVICE:" in content:
+                            # Extract date/time: [BOOK_SERVICE: 2026-05-09 14:00]
+                            try:
+                                booking_info = content.split("[BOOK_SERVICE:")[1].split("]")[0].strip()
+                                parts = booking_info.split(" ")
+                                b_date = parts[0]
+                                # Robust date check: if only day is given (e.g. "20"), add current month/year
+                                if "-" not in b_date:
+                                    b_date = f"{datetime.now().year}-{datetime.now().month:02d}-{int(b_date):02d}"
+                                
+                                b_time = parts[1] if len(parts) > 1 else "10:00"
+                                success, msg = retail_agent_utils.book_service_slot(self.user_profile.get("name", "Unknown"), self.caller_id, b_date, b_time)
+                                if success:
+                                    content = content.split("[BOOK_SERVICE:")[0] + f" (Confirmed: {msg}) " + content.split("]")[1]
+                                else:
+                                    content = content.split("[BOOK_SERVICE:")[0] + " (Slot Full, try another time) " + content.split("]")[1]
+                            except:
+                                pass
+
+                        if "[UPDATE_NAME:" in content:
+                            try:
+                                new_name = content.split("[UPDATE_NAME:")[1].split("]")[0].strip()
+                                self.user_profile["name"] = new_name
+                            except:
+                                pass
+
+                        if "[FEEDBACK:" in content:
+                            try:
+                                fb_text = content.split("[FEEDBACK:")[1].split("]")[0].strip()
+                                # Deep AI Analysis for Feedback
+                                analysis = self.analyze_feedback_with_ai(fb_text)
+                                retail_agent_utils.save_feedback(
+                                    self.user_profile.get("name", "Unknown"), 
+                                    self.caller_id, 
+                                    fb_text,
+                                    sentiment=analysis.get("sentiment", "Neutral"),
+                                    rating=analysis.get("rating", 3),
+                                    summary=analysis.get("summary", ""),
+                                    churn_risk=analysis.get("churn_risk", "Low"),
+                                    purchase_probability=analysis.get("purchase_probability", "Medium"),
+                                    tone=analysis.get("tone", "Neutral"),
+                                    recommendation=analysis.get("recommendation", "Follow up")
+                                )
+                            except:
+                                pass
+                        
+                        # Final clean of all tags before returning to say()
+                        content = re.sub(r'\[[^\]]*\]?', '', content).strip()
+                        content = re.sub(r'\([^)]*\)?', '', content).strip()
+                        
+                        return content # Success return!
+                elif response.status_code == 429:
+                    self.log(f"Rate limit hit, retrying in 1s... (Attempt {attempt+1})")
+                    time.sleep(1)
                 else:
-                    self.log("LLM returned empty content.")
-            else:
-                self.log(f"Sarvam LLM Error: {response.text}")
-        except Exception as e:
-            self.log(f"LLM Exception: {str(e)}")
-            
+                    self.log(f"LLM Error {response.status_code}: {response.text}")
+                    break
+            except Exception as e:
+                self.log(f"LLM attempt {attempt+1} failed: {e}")
+                if attempt == max_retries - 1:
+                    break
+                time.sleep(1)
+        
         # Multilingual fallback messages
         fallbacks = {
             "kn-IN": "\u0c95\u0ccd\u0cb7\u0cae\u0cbf\u0cb8\u0cbf, \u0ca8\u0ca8\u0c97\u0cc6 \u0c85\u0ca6\u0ca8\u0ccd\u0ca8\u0cc1 \u0caa\u0ccd\u0cb0\u0cbe\u0cb8\u0cc6\u0cb8\u0ccd \u0cae\u0cbe\u0ca1\u0cb2\u0cc1 \u0cb8\u0cbe\u0ca7\u0ccd\u0caf\u0cb5\u0cbe\u0c97\u0cb2\u0cbf\u0cb2\u0ccd\u0cb2. \u0ca6\u0caf\u0cb5\u0cbf\u0c9f\u0ccd\u0c9f\u0cc1 \u0cae\u0ca4\u0ccd\u0ca4\u0cca\u0cae\u0ccd\u0cae\u0cc6 \u0caa\u0ccd\u0cb0\u0caf\u0ca4\u0ccd\u0ca8\u0cbf\u0cb8\u0cbf.",
