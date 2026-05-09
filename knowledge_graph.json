@@ -1,58 +1,139 @@
 {
     "business_info": {
-        "name": "Ather Energy Showroom",
-        "location": "Bengaluru",
+        "name": "Ather Space - Indiranagar",
+        "location": "No. 3, 100 Feet Rd, Binnamangala, 1st Stage, Indiranagar, Bengaluru, Karnataka 560038",
+        "city": "Bengaluru",
         "timings": "9 AM to 8 PM",
-        "contact": "+91 80 1234 5678"
+        "contact": "+91 80 1234 5678",
+        "market_share_fy2026": "17%",
+        "showrooms_count": "700 across India"
     },
     "products": [
         {
-            "name": "Ather 450X",
-            "battery_capacity": "3.7 kWh",
-            "certified_range": "150 km",
-            "true_range": "110 km",
-            "top_speed": "90 km/h",
-            "acceleration_0_40": "3.3 sec",
-            "price_starting": "1,44,921 INR",
-            "colors": ["Cosmic Black", "Lunar Grey", "Salt White", "Space Grey", "Still White", "True Red"],
-            "current_offers": "30% off on specific inventory"
+            "name": "Ather 450S",
+            "price_ex_showroom": "₹1.28 – ₹1.36 Lakh",
+            "mileage_arai": "122–161 km/charge",
+            "real_world_range": "~70–90 km",
+            "motor": "5.4 kW, 22 Nm torque",
+            "charging_time": "~7.45 hrs (0–100%)",
+            "colors": [
+                "Still White",
+                "Stealth Blue",
+                "Space Grey",
+                "Cosmic Black"
+            ],
+            "connectivity": "Bluetooth + Wi-Fi",
+            "status": "Available"
         },
         {
-            "name": "Ather 450S",
-            "battery_capacity": "2.9 kWh",
-            "certified_range": "115 km",
-            "true_range": "90 km",
-            "top_speed": "90 km/h",
-            "acceleration_0_40": "3.9 sec",
-            "price_starting": "1,17,599 INR",
-            "colors": ["Salt White", "Cosmic Black", "Space Grey", "Still White"],
-            "current_offers": "50% off for limited period"
+            "name": "Ather 450X",
+            "price_ex_showroom": "₹1.47 – ₹1.51 Lakh",
+            "range_eco": "Up to 146 km",
+            "features": [
+                "7\" touchscreen",
+                "Snapdragon Quad Core",
+                "4G SIM",
+                "Wi-Fi",
+                "OTA updates",
+                "Map navigation",
+                "Auto indicator off",
+                "Guide-me-home lights"
+            ],
+            "subsidy": "Up to ₹5,000 under PM e-Drive (extended till July 2026)",
+            "status": "Available"
         },
         {
             "name": "Ather 450 Apex",
-            "battery_capacity": "3.7 kWh",
-            "certified_range": "157 km",
-            "top_speed": "100 km/h",
-            "acceleration_0_40": "2.9 sec",
-            "price_starting": "1,88,999 INR",
-            "special_feature": "Indium Blue finish with transparent panels",
-            "warp_plus_mode": "Included"
+            "name_type": "Flagship performance scooter",
+            "price_ex_showroom": "₹1.90 Lakh",
+            "range_idc": "~157 km",
+            "status": "Available"
         },
         {
             "name": "Ather Rizta",
             "segment": "Family Scooter",
-            "seat_size": "Largest in category",
-            "storage": "34L underseat + 22L optional Frunk",
-            "range_options": ["123 km", "160 km"],
-            "top_speed": "80 km/h",
-            "price_starting": "1,09,999 INR"
+            "price_ex_showroom": "₹1.09 – ₹1.44 Lakh",
+            "battery_options": [
+                {
+                    "capacity": "2.9 kWh",
+                    "range": "123 km"
+                },
+                {
+                    "capacity": "3.7 kWh",
+                    "range": "160 km"
+                }
+            ],
+            "storage": {
+                "under_seat": "34 litres",
+                "frunk": "22 litres (optional)",
+                "total": "56 litres"
+            },
+            "seat_height": "780 mm",
+            "colors": "7 options (3 monotone + 4 dual-tone)",
+            "special_features": [
+                "Hill-hold",
+                "Reverse mode",
+                "Voice assistant",
+                "WhatsApp navigation push",
+                "Touchscreen (OTA upgraded)",
+                "Eco & Zip modes"
+            ],
+            "status": "Available"
+        }
+    ],
+    "discounts_and_offers": {
+        "total_benefits": "Up to ₹20,000 (Available till March 31, 2026 on Rizta and 450 Series)",
+        "breakdown": [
+            "₹10,000 credit card discount (ICICI, HDFC, SBI, OneCard, IDFC, Federal Bank)",
+            "₹6,500 cash discount",
+            "₹3,500 extended components warranty"
+        ],
+        "government_subsidy": "PM e-Drive: ₹5,000 (extended till July 2026)",
+        "finance": {
+            "emi": "No upfront payment available",
+            "interest_rate": "8.99% (below industry average)"
+        },
+        "starting_on_road_bengaluru": "₹1,17,499"
+    },
+    "upcoming_vehicles": [
+        {
+            "platform": "Ather EL Platform",
+            "expected_launch": "Festive season 2026",
+            "target_segment": "₹1–1.25 lakh mass market",
+            "production_capacity": "~42,000 units/month",
+            "styles": [
+                "Family",
+                "Maxi-scooter",
+                "Sporty"
+            ]
+        },
+        {
+            "name": "Ather EL01",
+            "type": "Entry-level scooter",
+            "expected_price": "Under ₹1 lakh",
+            "status": "Production version of EL01 Concept"
+        },
+        {
+            "name": "Ather Redux Concept",
+            "type": "Sportier concept model",
+            "expected_price": "Under ₹1 lakh",
+            "status": "In concept stage"
         }
     ],
     "service_info": {
         "intervals": [
-            {"milestone": "5,000 km", "type": "Periodic Maintenance"},
-            {"milestone": "10,000 km", "type": "Periodic Maintenance"},
-            {"milestone": "20,000 km", "type": "Major Service"}
+            {
+                "milestone": "5,000 km",
+                "type": "Periodic Maintenance"
+            },
+            {
+                "milestone": "10,000 km",
+                "type": "Periodic Maintenance"
+            },
+            {
+                "milestone": "20,000 km",
+                "type": "Major Service"
+            }
         ],
         "benefits": [
             "Extends battery health and life",
@@ -65,6 +146,6 @@
     "faq": {
         "charging_time": "0 to 80% in 5 hours 45 mins (Home Charging)",
         "fast_charging": "Ather Grid: 1.5 km/min up to 80%",
-        "connectivity": "Ather Connect Pro (Google Maps, Bluetooth Call/Music, OTA updates)"
+        "connectivity": "Ather Connect Pro (Google Maps, Bluetooth Call/Music, OTA updates, WhatsApp navigation push)"
     }
 }
