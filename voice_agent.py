@@ -411,7 +411,14 @@ class MultilingualVoiceAgent:
         6. TECHNICAL SUPPORT: Answer tech questions first. Don't push booking unless asked.
         
         INTERNAL TAGS (APPEND TO END):
-        [BOOK_SERVICE: YYYY-MM-DD HH:MM], [CANCEL_SERVICE], [HOT_LEAD], [SHIFT_TO: Name], [UPDATE_NAME: Name], [FEEDBACK: Text]
+        [BOOK_SERVICE: YYYY-MM-DD HH:MM], [CANCEL_SERVICE], [HOT_LEAD], [SHIFT_TO: Name or Role], [UPDATE_NAME: Name], [FEEDBACK: Text]
+        
+        AGENT DIRECTORY (For [SHIFT_TO:]):
+        - Sales: Aura
+        - Technical/Battery: Kavi
+        - Manager/Operations/Escalation: Zephyr
+        - Customer Experience/Community: Isha
+        - Software/App Support: Arya
         """
         
         self.log("LLM Thinking (Gemini Deep Research)...")
@@ -456,17 +463,45 @@ class MultilingualVoiceAgent:
                 if "[SWITCH_AGENT:" in content or "[SHIFT_TO:" in content:
                     try:
                         tag = "[SWITCH_AGENT:" if "[SWITCH_AGENT:" in content else "[SHIFT_TO:"
-                        agent_name = content.split(tag)[1].split("]")[0].strip()
-                        for staff in self.staff_list:
-                            if staff['name'].lower() == agent_name.lower():
-                                transition_msg = self._get_transition_msg(staff['name'], staff.get('role', 'Specialist'))
-                                self.say(transition_msg)
-                                self.active_agent = staff
-                                self.log(f"Switched to Persona: {staff['name']} ({staff['voice_gender']})")
-                                with open("/home/satoru/Desktop/ather/active_agent.json", "w") as f:
-                                    json.dump(staff, f, indent=4)
+                        requested = content.split(tag)[1].split("]")[0].strip().lower()
+                        
+                        target_staff = None
+                        # 1. Try to match by Name
+                        for s in self.staff_list:
+                            if s['name'].lower() == requested:
+                                target_staff = s
                                 break
-                        content = content.replace(f"{tag}{agent_name}]", "").strip()
+                        
+                        # 2. Try to match by Role/Department
+                        if not target_staff:
+                            for s in self.staff_list:
+                                if requested in s.get('role', '').lower() or requested in s.get('persona', '').lower():
+                                    target_staff = s
+                                    break
+                        
+                        # 3. Fallback logic: If not found, say unavailable and move to Manager (Zephyr)
+                        if not target_staff:
+                            # Search for Operations Manager
+                            for s in self.staff_list:
+                                if "manager" in s.get('role', '').lower():
+                                    # Inform user that the specific person/dept is unavailable
+                                    self.say(f"I'm sorry, that department is currently busy. Let me connect you with our Operations Manager, Zephyr.")
+                                    target_staff = s
+                                    break
+                        
+                        if target_staff:
+                            # Only shift if it's a different agent
+                            if target_staff['name'] != self.active_agent.get('name'):
+                                transition_msg = self._get_transition_msg(target_staff['name'], target_staff.get('role', 'Specialist'))
+                                self.say(transition_msg)
+                                self.active_agent = target_staff
+                                self.log(f"Switched to Persona: {target_staff['name']} ({target_staff['voice_gender']})")
+                                # Save state
+                                with open("/home/satoru/Desktop/ather/active_agent.json", "w") as f:
+                                    json.dump(target_staff, f, indent=4)
+                        
+                        # Remove tag from content
+                        content = re.sub(r'\[(SWITCH_AGENT|SHIFT_TO):[^\]]*\]', '', content).strip()
                     except Exception as e:
                         self.log(f"Persona shift failed: {e}")
 
