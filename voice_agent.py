@@ -1,4 +1,4 @@
-#!/usr/bin/env python3
+#!/home/satoru/Desktop/ather/venv/bin/python3
 import sys
 import os
 import requests
@@ -12,6 +12,8 @@ import retail_agent_utils
 import logging
 import urllib3
 import re
+from google import genai
+
 
 # Suppress SSL warnings for verify=False
 urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
@@ -37,7 +39,8 @@ if not SARVAM_API_KEY:
 
 SARVAM_TTS_URL = "https://api.sarvam.ai/text-to-speech"
 SARVAM_STT_URL = "https://api.sarvam.ai/speech-to-text"
-GROQ_URL = "https://api.groq.com/openai/v1/chat/completions"
+GEMINI_API_KEY = os.getenv("GEMINI_API_KEY")
+
 
 class MultilingualVoiceAgent:
     def __init__(self):
@@ -53,6 +56,10 @@ class MultilingualVoiceAgent:
         self.user_profile = retail_agent_utils.get_user_profile(self.caller_id)
         self.load_active_agent()
         self._cache_knowledge()
+        
+        # Initialize Gemini Client
+        self.gemini_client = genai.Client(api_key=GEMINI_API_KEY)
+
 
     def _cache_knowledge(self):
         """Cache knowledge graph in memory for sub-second LLM processing."""
@@ -266,11 +273,17 @@ class MultilingualVoiceAgent:
 
     def listen_and_transcribe(self):
         """Record audio with aggressive silence detection for low latency."""
-        # Increased timeout to 8s and silence to 3s for better stability
-        self.agi.record_file(self.recording_path, "wav", "#", 8000, 0, True, 3)
-        
-        if not os.path.exists(f"{self.recording_path}.wav"):
+        res = self.agi.record_file(self.recording_path, "wav", "#", 8000, 0, True, 3)
+        if isinstance(res, dict):
+            if res.get('result') == '-1':
+                self.log("Hangup detected during recording.")
+                return None
+        elif isinstance(res, str) and "hangup" in res.lower():
+            self.log("Hangup detected during recording (string).")
             return None
+        if not os.path.exists(f"{self.recording_path}.wav"):
+            self.log("Recording file not found.")
+            return ""
 
         self.log("Transcribing...")
         start_stt = time.time()
@@ -285,17 +298,17 @@ class MultilingualVoiceAgent:
                 logging.debug(f"STT Response Status: {response.status_code}")
                 if response.status_code == 200:
                     resp_json = response.json()
-                    logging.debug(f"STT Response: {resp_json}")
                     self.log(f"STT Latency: {time.time() - start_stt:.2f}s")
                     transcript = resp_json.get("transcript", "")
                     self.log(f"User said: {transcript}")
-                    self.conversation.append({"role": "user", "content": transcript, "lang": self.language})
+                    # Remove redundant conversation append here, it's done in run()
                     return transcript
                 else:
                     self.log(f"STT Error {response.status_code}: {response.text}")
+                    return ""
         except Exception as e:
             self.log(f"STT Exception: {str(e)}")
-        return None
+            return ""
 
     def get_llm_response(self, text):
         """Get response from Sarvam AI LLM using cached knowledge."""
@@ -401,163 +414,117 @@ class MultilingualVoiceAgent:
         [BOOK_SERVICE: YYYY-MM-DD HH:MM], [CANCEL_SERVICE], [HOT_LEAD], [SHIFT_TO: Name], [UPDATE_NAME: Name], [FEEDBACK: Text]
         """
         
-        self.log("LLM Thinking (Groq)...")
+        self.log("LLM Thinking (Gemini Deep Research)...")
         start_llm = time.time()
         
-        # Build messages including history
-        messages = [{"role": "system", "content": prompt}]
-        
-        # Add past context (last 4 turns for tokens)
+        # Build prompt including history and context
+        history_text = ""
         for turn in self.conversation[-4:]:
-            role = "assistant" if turn["role"] == "agent" else "user"
-            messages.append({"role": role, "content": turn["content"]})
-            
-        # Add current query
-        messages.append({"role": "user", "content": text})
+            role = "Assistant" if turn["role"] == "agent" else "User"
+            history_text += f"{role}: {turn['content']}\n"
         
-        payload = {
-            "model": "meta-llama/llama-4-scout-17b-16e-instruct",
-            "messages": messages,
-            "temperature": 0.3
-        }
-        headers = {
-            "Authorization": f"Bearer {GROQ_API_KEY}",
-            "Content-Type": "application/json"
-        }
+        full_input = f"{prompt}\n\nCONVERSATION HISTORY:\n{history_text}\nUSER: {text}"
+
+        try:
+            # Use flash model for voice interaction speed
+            response = self.gemini_client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=full_input,
+                config={'system_instruction': prompt, 'temperature': 0.3}
+            )
+            content = response.text
+
+            if content:
+                self.log(f"LLM Latency: {time.time() - start_llm:.2f}s")
+                
+                # Strip <think> tags or reasoning artifacts
+                content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
+                
+                self.conversation.append({"role": "agent", "content": content, "lang": self.language})
+                
+                # 1. Passive Interest Detection
+                lower_text = text.lower()
+                if any(word in lower_text for word in ["buy", "price", "booking", "interested", "cost", "showroom", "test ride"]):
+                    if "[HOT_LEAD]" not in content:
+                        content += " [HOT_LEAD]"
+                
+                if any(word in lower_text for word in ["good", "bad", "problem", "excellent", "worst", "feedback", "service is"]):
+                    if "[FEEDBACK:" not in content:
+                        content += f" [FEEDBACK: Customer opinion: {text[:60]}]"
+
+                # 2. Logic to log leads based on tags
+                if "[SWITCH_AGENT:" in content or "[SHIFT_TO:" in content:
+                    try:
+                        tag = "[SWITCH_AGENT:" if "[SWITCH_AGENT:" in content else "[SHIFT_TO:"
+                        agent_name = content.split(tag)[1].split("]")[0].strip()
+                        for staff in self.staff_list:
+                            if staff['name'].lower() == agent_name.lower():
+                                transition_msg = self._get_transition_msg(staff['name'], staff.get('role', 'Specialist'))
+                                self.say(transition_msg)
+                                self.active_agent = staff
+                                self.log(f"Switched to Persona: {staff['name']} ({staff['voice_gender']})")
+                                with open("/home/satoru/Desktop/ather/active_agent.json", "w") as f:
+                                    json.dump(staff, f, indent=4)
+                                break
+                        content = content.replace(f"{tag}{agent_name}]", "").strip()
+                    except Exception as e:
+                        self.log(f"Persona shift failed: {e}")
+
+                if "[HOT_LEAD]" in content:
+                    retail_agent_utils.add_lead(
+                        self.user_profile.get("name", "Unknown"), 
+                        self.caller_id, 
+                        notes=text, 
+                        priority="Hot"
+                    )
+                    content = content.replace("[HOT_LEAD]", "").strip()
+                
+                if "[CANCEL_SERVICE]" in content:
+                    retail_agent_utils.cancel_service_slot(self.caller_id)
+                    content = content.replace("[CANCEL_SERVICE]", "").strip()
+
+                if "[BOOK_SERVICE:" in content:
+                    try:
+                        booking_info = content.split("[BOOK_SERVICE:")[1].split("]")[0].strip()
+                        parts = booking_info.split(" ")
+                        b_date = parts[0]
+                        if "-" not in b_date:
+                            b_date = f"{datetime.now().year}-{datetime.now().month:02d}-{int(b_date):02d}"
+                        b_time = parts[1] if len(parts) > 1 else "10:00"
+                        success, msg = retail_agent_utils.book_service_slot(self.user_profile.get("name", "Unknown"), self.caller_id, b_date, b_time)
+                        if success:
+                            content = content.split("[BOOK_SERVICE:")[0] + f" (Confirmed: {msg}) " + content.split("]")[1]
+                    except: pass
+
+                if "[FEEDBACK:" in content:
+                    try:
+                        fb_text = content.split("[FEEDBACK:")[1].split("]")[0].strip()
+                        analysis = self.analyze_feedback_with_ai(fb_text)
+                        retail_agent_utils.save_feedback(
+                            self.user_profile.get("name", "Unknown"), 
+                            self.caller_id, 
+                            fb_text,
+                            sentiment=analysis.get("sentiment", "Neutral"),
+                            rating=analysis.get("rating", 3)
+                        )
+                    except: pass
+                
+                content = re.sub(r'\[[^\]]*\]?', '', content).strip()
+                content = re.sub(r'\([^)]*\)?', '', content).strip()
+                
+                return content
+        except Exception as e:
+            self.log(f"Gemini Deep Research failed: {e}")
+
         
-        max_retries = 2
-        for attempt in range(max_retries):
-            try:
-                response = requests.post(GROQ_URL, json=payload, headers=headers, verify=False, timeout=10)
-                if response.status_code == 200:
-                    self.log(f"LLM Latency: {time.time() - start_llm:.2f}s")
-                    content = response.json()["choices"][0]["message"].get("content")
-                    if content:
-                        # Strip <think> tags for Qwen reasoning models
-                        content = re.sub(r'<think>.*?</think>', '', content, flags=re.DOTALL).strip()
-                        
-                        self.conversation.append({"role": "agent", "content": content, "lang": self.language})
-                        
-                        # 1. Passive Interest Detection (Safety Net for Dashboard Updates)
-                        lower_text = text.lower()
-                        if any(word in lower_text for word in ["buy", "price", "booking", "interested", "cost", "showroom", "test ride"]):
-                            if "[HOT_LEAD]" not in content:
-                                content += " [HOT_LEAD]"
-                        
-                        if any(word in lower_text for word in ["good", "bad", "problem", "excellent", "worst", "feedback", "service is"]):
-                            if "[FEEDBACK:" not in content:
-                                content += f" [FEEDBACK: Customer opinion: {text[:60]}]"
+        # Multilingual fallback messages
+        fallbacks = {
+            "kn-IN": "\u0c95\u0ccd\u0cb7\u0cae\u0cbf\u0cb8\u0cbf, \u0ca8\u0ca8\u0c97\u0cc6 \u0c85\u0ca6\u0ca8\u0ccd\u0ca8\u0cc1 \u0caa\u0ccd\u0cb0\u0cbe\u0cb8\u0cc6\u0cb8\u0ccd \u0cae\u0cbe\u0ca1\u0cb2\u0cc1 \u0cb8\u0cbe\u0ca7\u0ccd\u0caf\u0cb5\u0cbe\u0c97\u0cb2\u0cbf\u0cb2\u0ccd\u0cb2. \u0ca6\u0caf\u0cb5\u0cbf\u0c9f\u0ccd\u0c9f\u0cc1 \u0cae\u0ca4\u0ccd\u0ca4\u0cca\u0cae\u0ccd\u0cae\u0cc6 \u0caa\u0ccd\u0cb0\u0caf\u0ca4\u0ccd\u0ca8\u0cbf\u0cb8\u0cbf.",
+            "hi-IN": "\u0915\u094d\u0937\u092e\u093e \u0915\u0930\u0947\u0902, \u092e\u0948\u0902 \u0909\u0938\u0947 \u0938\u0902\u0938\u093e\u0927\u093f\u0924 \u0928\u0939\u0940\u0902 \u0915\u0930 \u0938\u0915\u093e\u0964 \u0915\u0943\u092a\u092f\u093e \u092b\u093f\u0930 \u0938\u0947 \u092a\u094d\u0930\u092f\u093e\u0938 \u0915\u0930\u0947\u0902\u0964",
+            "en-IN": "I'm sorry, I couldn't process that right now. Could you please repeat?"
+        }
+        return fallbacks.get(self.language, fallbacks["en-IN"])
 
-                        # 2. Logic to log leads based on tags
-                        if "[SWITCH_AGENT:" in content or "[SHIFT_TO:" in content:
-                            try:
-                                tag = "[SWITCH_AGENT:" if "[SWITCH_AGENT:" in content else "[SHIFT_TO:"
-                                agent_name = content.split(tag)[1].split("]")[0].strip()
-                                for staff in self.staff_list:
-                                    if staff['name'].lower() == agent_name.lower():
-                                        transition_msg = self._get_transition_msg(staff['name'], staff.get('role', 'Specialist'))
-                                        self.say(transition_msg)
-                                        self.active_agent = staff
-                                        self.log(f"Switched to Persona: {staff['name']} ({staff['voice_gender']})")
-                                        # Update active_agent.json for persistence
-                                        with open("/home/satoru/Desktop/ather/active_agent.json", "w") as f:
-                                            json.dump(staff, f, indent=4)
-                                        break
-                                content = content.replace(f"{tag}{agent_name}]", "").strip()
-                            except Exception as e:
-                                self.log(f"Persona shift failed: {e}")
-
-                        if "[HOT_LEAD]" in content:
-                            # Determine stage based on context
-                            stage = "New Enquiry"
-                            if any(w in lower_text for w in ["test ride", "drive", "visit", "showroom"]):
-                                stage = "Test Ride"
-                            elif any(w in lower_text for w in ["discount", "price", "offer", "negotiate"]):
-                                stage = "Negotiation"
-                            elif any(w in lower_text for w in ["book", "order", "purchase"]):
-                                stage = "Booking"
-                            elif any(w in lower_text for w in ["contact", "called", "speak"]):
-                                stage = "Contacted"
-                                
-                            retail_agent_utils.add_lead(
-                                self.user_profile.get("name", "Unknown"), 
-                                self.caller_id, 
-                                notes=text, 
-                                priority="Hot",
-                                status=stage
-                            )
-                            content = content.replace("[HOT_LEAD]", "").strip()
-                        
-                        if "[CANCEL_SERVICE]" in content:
-                            try:
-                                success, msg = retail_agent_utils.cancel_service_slot(self.caller_id)
-                                content = content.replace("[CANCEL_SERVICE]", "").strip()
-                            except:
-                                pass
-                            content = content.strip()
-
-                        if "[BOOK_SERVICE:" in content:
-                            # Extract date/time: [BOOK_SERVICE: 2026-05-09 14:00]
-                            try:
-                                booking_info = content.split("[BOOK_SERVICE:")[1].split("]")[0].strip()
-                                parts = booking_info.split(" ")
-                                b_date = parts[0]
-                                # Robust date check: if only day is given (e.g. "20"), add current month/year
-                                if "-" not in b_date:
-                                    b_date = f"{datetime.now().year}-{datetime.now().month:02d}-{int(b_date):02d}"
-                                
-                                b_time = parts[1] if len(parts) > 1 else "10:00"
-                                success, msg = retail_agent_utils.book_service_slot(self.user_profile.get("name", "Unknown"), self.caller_id, b_date, b_time)
-                                if success:
-                                    content = content.split("[BOOK_SERVICE:")[0] + f" (Confirmed: {msg}) " + content.split("]")[1]
-                                else:
-                                    content = content.split("[BOOK_SERVICE:")[0] + " (Slot Full, try another time) " + content.split("]")[1]
-                            except:
-                                pass
-
-                        if "[UPDATE_NAME:" in content:
-                            try:
-                                new_name = content.split("[UPDATE_NAME:")[1].split("]")[0].strip()
-                                self.user_profile["name"] = new_name
-                            except:
-                                pass
-
-                        if "[FEEDBACK:" in content:
-                            try:
-                                fb_text = content.split("[FEEDBACK:")[1].split("]")[0].strip()
-                                # Deep AI Analysis for Feedback
-                                analysis = self.analyze_feedback_with_ai(fb_text)
-                                retail_agent_utils.save_feedback(
-                                    self.user_profile.get("name", "Unknown"), 
-                                    self.caller_id, 
-                                    fb_text,
-                                    sentiment=analysis.get("sentiment", "Neutral"),
-                                    rating=analysis.get("rating", 3),
-                                    summary=analysis.get("summary", ""),
-                                    churn_risk=analysis.get("churn_risk", "Low"),
-                                    purchase_probability=analysis.get("purchase_probability", "Medium"),
-                                    tone=analysis.get("tone", "Neutral"),
-                                    recommendation=analysis.get("recommendation", "Follow up")
-                                )
-                            except:
-                                pass
-                        
-                        # Final clean of all tags before returning to say()
-                        content = re.sub(r'\[[^\]]*\]?', '', content).strip()
-                        content = re.sub(r'\([^)]*\)?', '', content).strip()
-                        
-                        return content # Success return!
-                elif response.status_code == 429:
-                    self.log(f"Rate limit hit, retrying in 1s... (Attempt {attempt+1})")
-                    time.sleep(1)
-                else:
-                    self.log(f"LLM Error {response.status_code}: {response.text}")
-                    break
-            except Exception as e:
-                self.log(f"LLM attempt {attempt+1} failed: {e}")
-                if attempt == max_retries - 1:
-                    break
-                time.sleep(1)
         
         # Multilingual fallback messages
         fallbacks = {
@@ -568,7 +535,7 @@ class MultilingualVoiceAgent:
         return fallbacks.get(self.language, fallbacks["en-IN"])
 
     def analyze_feedback_with_ai(self, text):
-        """Analyze feedback text for sentiment, rating, and churn risk using Groq."""
+        """Analyze feedback text for sentiment, rating, and churn risk using Gemini 2.5 Flash."""
         try:
             prompt = f"""
             Analyze the following customer feedback for an Ather Energy showroom:
@@ -586,26 +553,23 @@ class MultilingualVoiceAgent:
             Strictly JSON only.
             """
             
-            headers = {
-                "Authorization": f"Bearer {GROQ_API_KEY}",
-                "Content-Type": "application/json"
-            }
-            payload = {
-                "model": "llama-3.1-8b-instant", # Use faster model for analysis
-                "messages": [{"role": "user", "content": prompt}],
-                "temperature": 0.0,
-                "response_format": {"type": "json_object"}
-            }
-            
-            response = requests.post(GROQ_URL, json=payload, headers=headers, timeout=5)
-            if response.status_code == 200:
-                return json.loads(response.json()["choices"][0]["message"]["content"])
-        except:
-            pass
+            response = self.gemini_client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+                config={
+                    'response_mime_type': 'application/json',
+                    'temperature': 0.0,
+                }
+            )
+            if response.text:
+                return json.loads(response.text)
+        except Exception as e:
+            self.log(f"Feedback analysis failed: {e}")
         return {"sentiment": "Neutral", "rating": 3, "summary": text[:60], "churn_risk": "Low"}
 
+
     def generate_llm_summary(self):
-        """Generate a professional one-line summary using Groq at the end of the call."""
+        """Generate a professional one-line summary using Gemini 2.5 Flash at the end of the call."""
         if not self.conversation:
             return "No interaction recorded."
             
@@ -616,90 +580,24 @@ class MultilingualVoiceAgent:
             
         prompt = f"Summarize this customer interaction in exactly one professional line (no dialogue): \n\n{dialogue}"
         
-        payload = {
-            "model": "llama-3.1-8b-instant",
-            "messages": [
-                {"role": "system", "content": "You are a professional showroom manager. Summarize the following call in one short line."},
-                {"role": "user", "content": prompt}
-            ],
-            "temperature": 0.1,
-            "max_tokens": 100
-        }
-        
         try:
-            headers = {
-                "Authorization": f"Bearer {GROQ_API_KEY}",
-                "Content-Type": "application/json"
-            }
-            response = requests.post(GROQ_URL, json=payload, headers=headers, timeout=5)
-            if response.ok:
-                summary = response.json()['choices'][0]['message']['content'].strip()
+            response = self.gemini_client.models.generate_content(
+                model='gemini-2.5-flash',
+                contents=prompt,
+                config={
+                    'system_instruction': "You are a professional showroom manager. Summarize the following call in one short line.",
+                    'temperature': 0.1,
+                }
+            )
+            if response.text:
+                summary = response.text.strip()
                 return summary.replace('"', '')
-        except:
-            pass
+        except Exception as e:
+            self.log(f"Summary generation failed: {e}")
             
         return retail_agent_utils.summarize_conversation(self.conversation)
 
-    def run(self):
-        try:
-            self.agi.answer()
-            time.sleep(0.5)
-            
-            # 1. ALWAYS ask for language preference at the start
-            self.log("Playing initial language selection menu...")
-            # We use English for the initial menu
-            self.say("Welcome to Ather Energy. For English, press 1. \u0c95\u0ca8\u0ccd\u0ca8\u0ca1\u0c95\u0ccd\u0c95\u0cbe\u0c97\u0cbf 2 \u0c92\u0ca4\u0ccd\u0ca4\u0cbf\u0cb0\u0cbf. \u0939\u093f\u0902\u0926\u0940 \u0915\u0947 \u0932\u093f\u090f 3 \u0926\u092c\u093e\u090f\u0902.", "en-IN")
-            
-            digit = self.agi.wait_for_digit(8000)
-            if digit == '2':
-                self.language = "kn-IN"
-            elif digit == '3':
-                self.language = "hi-IN"
-            else:
-                self.language = "en-IN" # Default to English
-            
-            self.user_profile["language"] = self.language
-            self.log(f"Language selected: {self.language}")
 
-            # 2. Personalized Greeting based on selection
-            customer_name = self.user_profile.get("name", "Unknown")
-            agent_name = self.active_agent.get("name", "Aura")
-            
-            if customer_name != "Unknown":
-                if self.language == "kn-IN":
-                    self.say(f"\u0ca8\u0cae\u0cb8\u0ccd\u0c95\u0cbe\u0cb0 {customer_name} \u0c85\u0cb5\u0cb0\u0cc7, \u0ca8\u0cbe\u0ca8\u0cc1 {agent_name}. \u0ca8\u0cbf\u0cae\u0c97\u0cc6 \u0cb9\u0cc7\u0c97\u0cc6 \u0cb8\u0cb9\u0cbe\u0caf \u0cae\u0cbe\u0ca1\u0cac\u0cb2\u0ccd\u0cb2\u0cc6?")
-                elif self.language == "hi-IN":
-                    self.say(f"नमस्ते {customer_name} जी, मैं {agent_name} हूँ। मैं आपकी क्या मदद कर सकता हूँ?")
-                else:
-                    self.say(f"Hello {customer_name}! I am {agent_name}. How can I assist you with your Ather scooter today?")
-            else:
-                # Ask for name if unknown
-                if self.language == "kn-IN":
-                    self.say(f"\u0ca8\u0cae\u0ccd\u0cae \u0c85\u0ca5\u0cb0\u0ccd \u0c8e\u0ca8\u0cb0\u0ccd\u0c9c\u0cbf\u0c97\u0cc6 \u0cb8\u0ccd\u0cb5\u0cbe\u0c97\u0ca4. \u0ca8\u0cbe\u0ca8\u0cc1 {agent_name}, \u0ca8\u0cbf\u0cae\u0ccd\u0cae \u0cb9\u0cc6\u0cb8\u0cb0\u0cc7\u0ca8\u0cc1?")
-                elif self.language == "hi-IN":
-                    self.say(f"एथर एनर्जी में आपका स्वागत है। मैं {agent_name} हूँ, आपका नाम क्या है?")
-                else:
-                    self.say(f"Welcome to Ather Energy. I am {agent_name}. May I know your name please?")
-            
-            # Global Conversation Loop
-            while True:
-                user_text = self.listen_and_transcribe()
-                # Continue if user text is empty string (just didn't catch speech)
-                # But break if it's None (error or actual hangup)
-                if user_text is not None:
-                    if user_text.strip():
-                        llm_reply = self.get_llm_response(user_text)
-                        self.say(llm_reply)
-                    else:
-                        # User was silent or STT failed to find words
-                        # Instead of breaking, we could ask "Are you still there?"
-                        # But for now, we'll just listen again or break after multiple silences.
-                        # For simplicity, let's just listen again.
-                        continue
-                else:
-                    break # End call on error or hangup
-        except Exception as e:
-            self.log(f"CRITICAL ERROR in Run: {str(e)}")
     def _save_call_log(self, is_final=False):
         """Save the conversation log in real-time. Use LLM summary only at the end."""
         try:
@@ -807,19 +705,29 @@ class MultilingualVoiceAgent:
             self._save_call_log()
 
             # 3. Main Conversation Loop
+            consecutive_silence = 0
             while True:
                 user_text = self.listen_and_transcribe()
                 
                 if user_text is not None:
                     if user_text.strip():
+                        consecutive_silence = 0
                         self.conversation.append({"role": "user", "content": user_text})
                         llm_reply = self.get_llm_response(user_text)
                         self.say(llm_reply)
                         # Real-time save after each turn
                         self._save_call_log()
                     else:
+                        consecutive_silence += 1
+                        if consecutive_silence >= 2:
+                            self.say("I haven't heard from you in a while. Are you still there?")
+                            if consecutive_silence >= 3:
+                                self.say("Since I am not getting any response, I will end the call now. Thank you for calling Ather Energy!")
+                                break
                         continue
                 else:
+                    # Potential hangup or STT error
+                    self.log("No input or STT error detected.")
                     break
         except Exception as e:
             self.log(f"CRITICAL ERROR in Run: {str(e)}")
